@@ -1,0 +1,14 @@
+[
+  {
+    "saved_at": "2026-03-21T08:54:30.071372",
+    "type": "P2P \u2192 P2P",
+    "buy_exchange": "Binance",
+    "sell_exchange": "Binance",
+    "buy_price": 45.13,
+    "sell_price": 45.55,
+    "spread_pct": 0.930644803899833,
+    "profit_uah": 93.06448038998315,
+    "score": 66.017737646798,
+    "risk": "MEDIUM"
+  }
+]
