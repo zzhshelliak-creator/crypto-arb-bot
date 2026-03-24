@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import statistics
+import time
 from models.types import (
     P2POrder, ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType,
     UserSettings
@@ -752,3 +753,83 @@ class ArbitrageEngine:
             f"{len(tri_opps)} triangular → {len(filtered)} viable after risk filter"
         )
         return filtered[:10]
+
+    async def verify_opportunities(
+        self, opps: list[ArbitrageOpportunity], settings: UserSettings
+    ) -> list[ArbitrageOpportunity]:
+        """
+        Повторно запитує ордери з бірж, задіяних у топ-можливостях, і підтверджує,
+        що ціни не змінились більш ніж на 0.5% з моменту першого скану.
+        Позначає кожну можливість як verified=True/False.
+        """
+        if not opps:
+            return opps
+
+        # Знаходимо унікальні біржі для перевірки (тільки P2P-типи)
+        exchanges_needed: set[str] = set()
+        for o in opps:
+            if o.buy_order:
+                exchanges_needed.add(o.buy_exchange)
+            if o.sell_order:
+                exchanges_needed.add(o.sell_exchange)
+        exchanges_needed = {
+            e for e in exchanges_needed
+            if e in ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"]
+        }
+
+        if not exchanges_needed:
+            return opps
+
+        logger.info(f"Verify: re-fetching from {exchanges_needed}")
+        verify_start = time.time()
+
+        try:
+            buy2, sell2 = await asyncio.gather(
+                self.api.fetch_all_p2p(
+                    "BUY", settings.amount_uah,
+                    list(exchanges_needed), settings.banks
+                ),
+                self.api.fetch_all_p2p(
+                    "SELL", settings.amount_uah,
+                    list(exchanges_needed), settings.banks
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"Verify: re-fetch failed — {e}")
+            return opps
+
+        # Індексуємо re-fetched ордери за (exchange, side) → найкраща ціна
+        buy_price_by_ex: dict[str, float] = {}
+        sell_price_by_ex: dict[str, float] = {}
+        for o in buy2:
+            if o.price > 0:
+                cur = buy_price_by_ex.get(o.exchange, 0)
+                buy_price_by_ex[o.exchange] = max(cur, o.price)  # найвища buy (користувач продає дорожче)
+        for o in sell2:
+            if o.price > 0:
+                cur = sell_price_by_ex.get(o.exchange, float("inf"))
+                sell_price_by_ex[o.exchange] = min(cur, o.price)  # найнижча sell (користувач купує дешевше)
+
+        now = time.time()
+        TOLERANCE = 0.005  # 0.5%
+
+        for opp in opps:
+            v_buy = buy_price_by_ex.get(opp.buy_exchange, 0)
+            v_sell = sell_price_by_ex.get(opp.sell_exchange, 0)
+            if v_buy <= 0 or v_sell <= 0:
+                opp.verified = False
+                continue
+            buy_ok = abs(v_buy - opp.buy_price) / (opp.buy_price or 1) <= TOLERANCE
+            sell_ok = abs(v_sell - opp.sell_price) / (opp.sell_price or 1) <= TOLERANCE
+            opp.verified = buy_ok and sell_ok
+            opp.verified_at = now
+            opp.verified_buy_price = v_buy
+            opp.verified_sell_price = v_sell
+
+        verified_count = sum(1 for o in opps if o.verified)
+        elapsed = time.time() - verify_start
+        logger.info(
+            f"Verify done in {elapsed:.1f}s: {verified_count}/{len(opps)} confirmed "
+            f"(buy prices: {buy_price_by_ex}, sell prices: {sell_price_by_ex})"
+        )
+        return opps
