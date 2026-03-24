@@ -89,18 +89,50 @@ BANK_COMMISSIONS = {
 }
 
 BYBIT_PAYMENT_MAP = {
-    "1":   "Bank Transfer",
+    "1":   "Банківський переказ",
     "14":  "PrivatBank",
+    "31":  "PrivatBank",
     "43":  "Monobank",
+    "49":  "Ukrgasbank",
     "60":  "Oschadbank",
     "61":  "A-Bank",
     "63":  "PUMB",
     "64":  "PUMB",
+    "80":  "Oschadbank",
     "526": "PUMB",
+    "544": "Globus Bank",
     "545": "Raiffeisen",
     "623": "A-Bank",
     "660": "Ukrsibbank",
+    "773": "Sense SuperApp",
 }
+
+# Нормалізація назв банків з різних бірж до єдиного формату
+_BANK_NORMALIZE: dict[str, str | None] = {
+    "ABank":                  "A-Bank",
+    "PUMBBank":               "PUMB",
+    "Raiffaisen Bank":        "Raiffeisen",
+    "RaiffeisenBankAval":     "Raiffeisen",
+    "Raiffaizen":             "Raiffeisen",
+    "SenseSuperApp":          "Sense SuperApp",
+    "BankVlasnyiRakhunok":    "Банківський рахунок",
+    "Bank Vlasnyi Rakhunok":  "Банківський рахунок",
+    "Bank Transfer":          "Банківський переказ",
+    "Monobankiban":           "Monobank",
+    "alliancecard":           "Alliance Card",
+    "bank":                   None,  # занадто загальна назва — пропускаємо
+    "Idea Bank":              "Idea Bank",
+}
+
+
+def _normalize_bank(name: str) -> str | None:
+    """Нормалізує назву банку. Повертає None якщо треба пропустити."""
+    if not name or not name.strip():
+        return None
+    # Пропускаємо чисті числа (незамаплені коди Bybit)
+    if name.strip().isdigit():
+        return None
+    return _BANK_NORMALIZE.get(name, name)
 
 _BROWSER_HEADERS = {
     "User-Agent": (
@@ -972,6 +1004,18 @@ class ExchangeAPI:
         all_orders = []
         for r in results:
             all_orders.extend(r)
+
+        # Нормалізуємо назви банків — прибираємо дублікати і незрозумілі коди
+        for order in all_orders:
+            normalized = []
+            seen = set()
+            for b in order.payment_methods:
+                nb = _normalize_bank(b)
+                if nb and nb not in seen:
+                    normalized.append(nb)
+                    seen.add(nb)
+            order.payment_methods = normalized
+
         logger.info(
             f"fetch_all_p2p {side}: total {len(all_orders)} orders from "
             f"{[ex for ex in exchanges if ex in EXCHANGE_FETCHERS]}"
