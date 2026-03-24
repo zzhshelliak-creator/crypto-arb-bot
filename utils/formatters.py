@@ -1,3 +1,4 @@
+import time
 from models.types import ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType
 
 BANK_COMMISSIONS = {
@@ -101,10 +102,28 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
 
     steps = _build_steps(opp, trading_mode, net_profit, net_profit_pct)
 
+    # Verification status line
+    if opp.verified and opp.verified_at > 0:
+        age_sec = int(time.time() - opp.verified_at)
+        if age_sec < 5:
+            age_str = "щойно"
+        elif age_sec < 60:
+            age_str = f"{age_sec} сек тому"
+        else:
+            age_str = f"{age_sec // 60} хв тому"
+        verify_line = f"✅ <b>Ціни підтверджено</b> ({age_str}) — реальний ринок"
+        price_check = ""
+        if opp.verified_buy_price and abs(opp.verified_buy_price - opp.buy_price) > 0.001:
+            price_check = f" (перевірено: {opp.verified_buy_price:.2f}/{opp.verified_sell_price:.2f})"
+        verify_line += price_check
+    else:
+        verify_line = "⚠️ Ціни отримані з першого скану — можуть змінитись"
+
     msg = (
         f"🔥 <b>АРБІТРАЖ #{index}</b>\n"
         f"Тип: {arb_type_str}\n"
-        f"{exchange_line}\n\n"
+        f"{exchange_line}\n"
+        f"{verify_line}\n\n"
 
         f"💰 <b>Ціни:</b>\n"
         f"├ Купівля: {opp.buy_price:.2f} UAH\n"
