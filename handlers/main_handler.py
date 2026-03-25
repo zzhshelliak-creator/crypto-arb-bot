@@ -17,8 +17,8 @@ from handlers.keyboards import (
 )
 from models.types import UserSettings
 from utils.formatters import (
-    format_opportunity, format_opportunities_list, format_analytics,
-    format_settings, format_favorites
+    format_opportunity, format_opportunities_list, format_scan_report,
+    format_analytics, format_settings, format_favorites
 )
 from services.analytics import (
     record_scan, get_stats, save_favorite, get_favorites,
@@ -395,8 +395,10 @@ async def cb_scan_start(call: CallbackQuery):
         else:
             uid = call.from_user.id
             is_autoscan = uid in user_live_tasks and not user_live_tasks[uid].done()
+            scan_stats = shared.arb_engine.last_scan_stats
             body = format_opportunities_list(opportunities)
-            text = _expire_header() + "\n\n" + body
+            report = format_scan_report(scan_stats)
+            text = _expire_header() + "\n\n" + body + "\n\n" + report
             await call.message.edit_text(
                 text,
                 reply_markup=opportunities_list_kb(opportunities, autoscan_running=is_autoscan),
@@ -618,11 +620,13 @@ async def _live_loop(chat_id: int, user_id: int):
 
                 top = opps[0]
                 elapsed = _fmt_duration(time.time() - user_autoscan_start_time.get(user_id, time.time()))
+                scan_report = format_scan_report(shared.arb_engine.last_scan_stats)
                 alert_body = (
                     f"🔔 <b>Авто-Скан: нова можливість!</b>\n"
                     f"скан #{scan_count} • запущено {elapsed} тому\n\n"
                     + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                     + f"\n\n🔍 Всього знайдено в цьому скані: {len(opps)}"
+                    + "\n\n" + scan_report
                 )
                 alert_kb = opportunities_list_kb(opps, autoscan_running=True)
                 alert_text = _expire_header() + "\n\n" + alert_body
