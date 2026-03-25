@@ -6,4 +6,4 @@ startCommand = "python bot.py"
 restartPolicyType = "always"
 restartPolicyMaxRetries = 10
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 300
