@@ -890,16 +890,18 @@ class ArbitrageEngine:
             return opps
 
         # Індексуємо re-fetched ордери за (exchange, side) → найкраща ціна
+        # buy2 = де користувач КУПУЄ USDT (продавці) → шукаємо найдешевшого → min
+        # sell2 = де користувач ПРОДАЄ USDT (покупці) → шукаємо найщедрішого → max
         buy_price_by_ex: dict[str, float] = {}
         sell_price_by_ex: dict[str, float] = {}
         for o in buy2:
             if o.price > 0:
-                cur = buy_price_by_ex.get(o.exchange, 0)
-                buy_price_by_ex[o.exchange] = max(cur, o.price)  # найвища buy (користувач продає дорожче)
+                cur = buy_price_by_ex.get(o.exchange, float("inf"))
+                buy_price_by_ex[o.exchange] = min(cur, o.price)  # найдешевший продавець (мін ціна купівлі)
         for o in sell2:
             if o.price > 0:
-                cur = sell_price_by_ex.get(o.exchange, float("inf"))
-                sell_price_by_ex[o.exchange] = min(cur, o.price)  # найнижча sell (користувач купує дешевше)
+                cur = sell_price_by_ex.get(o.exchange, 0)
+                sell_price_by_ex[o.exchange] = max(cur, o.price)  # найщедріший покупець (макс ціна продажу)
 
         now = time.time()
         TOLERANCE = 0.005  # 0.5%
