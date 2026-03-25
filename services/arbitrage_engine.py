@@ -6,7 +6,7 @@ from models.types import (
     P2POrder, ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType,
     UserSettings
 )
-from services.exchange_api import ExchangeAPI, WITHDRAWAL_FEES_USDT, SPOT_TRADING_FEE
+from services.exchange_api import ExchangeAPI, WITHDRAWAL_FEES_USDT, SPOT_TRADING_FEE, clear_exchange_cache
 
 logger = logging.getLogger(__name__)
 
@@ -373,6 +373,7 @@ class ArbitrageEngine:
                             "profit_uah": calc["profit_uah"],
                         },
                         network=settings.network,
+                        scanned_at=time.time(),
                     )
                     opp.score = calculate_score(opp)
                     opp.risk = assess_risk(opp)
@@ -490,6 +491,7 @@ class ArbitrageEngine:
                                 "profit_uah": calc["profit_uah"],
                             },
                             network=resolved_net,
+                            scanned_at=time.time(),
                         )
                         opp.score = calculate_score(opp)
                         opp.risk = assess_risk(opp)
@@ -603,6 +605,7 @@ class ArbitrageEngine:
                     },
                     volatility_ok=vol_ok,
                     network=settings.network,
+                    scanned_at=time.time(),
                 )
                 opp.score = calculate_score(opp)
                 opportunities.append(opp)
@@ -858,7 +861,9 @@ class ArbitrageEngine:
         if not exchanges_needed:
             return opps
 
-        logger.info(f"Verify: re-fetching from {exchanges_needed}")
+        # Обов'язково очищаємо кеш для цих бірж — інакше verify поверне ті самі дані що й перший скан
+        cleared = clear_exchange_cache(list(exchanges_needed))
+        logger.info(f"Verify: cleared {cleared} cache entries, re-fetching from {exchanges_needed}")
         verify_start = time.time()
 
         try:
