@@ -1,5 +1,8 @@
+import os
 import time
 from models.types import ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType
+
+_PROXY_EXCHANGES = {"MEXC", "Gate.io", "HTX", "Bitget", "KuCoin"}
 
 # Generic payment labels that are NOT specific bank names — never show these
 _GENERIC_BANK_LABELS = {
@@ -219,6 +222,75 @@ def format_opportunities_list(opps: list[ArbitrageOpportunity]) -> str:
             f"{i}. {risk_e} <b>{arb_type}</b> | {ex_info}\n"
             f"   💰 +{opp.profit_uah:.0f} грн ({opp.spread_pct:.2f}%) | ⭐ {opp.score:.0f}/100"
         )
+    return "\n".join(lines)
+
+
+def format_scan_report(stats: dict) -> str:
+    """
+    Блок аналізу скану: які біржі перевірено, скільки ордерів, чому вибрані ці.
+    Показується під списком можливостей.
+    """
+    requested: list[str] = stats.get("requested_exchanges", [])
+    ex_counts: dict = stats.get("exchanges_with_data", {})
+    total_raw = stats.get("total_raw", 0)
+    trusted_buys = stats.get("trusted_buys", 0)
+    trusted_sells = stats.get("trusted_sells", 0)
+    same_ex = stats.get("same_ex", 0)
+    cross_ex = stats.get("cross_ex", 0)
+    triangular = stats.get("triangular", 0)
+    final = stats.get("final", 0)
+    risk_level = stats.get("risk_level", "MEDIUM")
+    has_proxy = bool(os.getenv("PROXY_URL", "").strip())
+
+    lines = ["📊 <b>Аналіз скану:</b>"]
+
+    # ── Стан кожної біржі ──────────────────────────────────────
+    ok_parts: list[str] = []
+    fail_parts: list[str] = []
+    proxy_needed: list[str] = []
+
+    for ex in requested:
+        count = ex_counts.get(ex, 0)
+        if count > 0:
+            ok_parts.append(f"{ex} ({count})")
+        else:
+            if ex in _PROXY_EXCHANGES and not has_proxy:
+                fail_parts.append(f"{ex}")
+                proxy_needed.append(ex)
+            else:
+                fail_parts.append(f"{ex} (0)")
+
+    if ok_parts:
+        lines.append("├ ✅ " + ", ".join(ok_parts))
+    if fail_parts:
+        if proxy_needed:
+            lines.append("├ ❌ " + ", ".join(fail_parts) + " — потрібен проксі")
+        else:
+            lines.append("├ ❌ " + ", ".join(fail_parts))
+
+    # ── Фільтрація ордерів ──────────────────────────────────────
+    lines.append(
+        f"├ Ордерів: {total_raw} → анти-скам: {trusted_buys} buy / {trusted_sells} sell"
+    )
+
+    # ── Знайдені пари ───────────────────────────────────────────
+    pair_parts = []
+    if same_ex:
+        pair_parts.append(f"{same_ex} одна біржа")
+    if cross_ex:
+        pair_parts.append(f"{cross_ex} крос-біржа")
+    if triangular:
+        pair_parts.append(f"{triangular} тріангул.")
+    pair_str = " + ".join(pair_parts) if pair_parts else "0 пар"
+    lines.append(f"├ Пар знайдено: {pair_str}")
+    lines.append(f"└ Показано топ {final}: score (спред+надійність+ліквідність), ризик ≤ {risk_level}")
+
+    # ── Підказка про проксі ─────────────────────────────────────
+    if proxy_needed:
+        lines.append(
+            f"\n<i>💡 Встанови PROXY_URL щоб розблокувати: {', '.join(proxy_needed)}</i>"
+        )
+
     return "\n".join(lines)
 
 
