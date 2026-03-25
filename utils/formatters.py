@@ -16,14 +16,26 @@ def _real_banks(payment_methods: list[str]) -> list[str]:
     """Return only real (specific) bank names, filtering out generic labels."""
     if not payment_methods:
         return []
-    return [m for m in payment_methods if m and m.lower().strip() not in _GENERIC_BANK_LABELS]
+    result = []
+    seen = set()
+    for m in payment_methods:
+        if not m or not m.strip():
+            continue
+        s = m.strip()
+        if s.lower() in _GENERIC_BANK_LABELS:
+            continue
+        if s.lower() not in seen:
+            seen.add(s.lower())
+            result.append(s)
+    return result
 
 
 def _clean_payment(raw: str) -> str:
     """Return empty string if raw is a generic/non-bank label (case-insensitive)."""
-    if not raw:
+    if not raw or not raw.strip():
         return ""
-    return "" if raw.lower().strip() in _GENERIC_BANK_LABELS else raw
+    stripped = raw.strip()
+    return "" if stripped.lower() in _GENERIC_BANK_LABELS else stripped
 
 
 BANK_COMMISSIONS = {
