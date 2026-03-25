@@ -172,34 +172,42 @@ class ArbitrageEngine:
         self.last_buy_orders: list[P2POrder] = []
         self.last_sell_orders: list[P2POrder] = []
 
-    def _amounts_compatible(self, buy: P2POrder, sell: P2POrder, amount_uah: float) -> tuple[bool, str]:
+    def _compatible_amount(self, buy: P2POrder, sell: P2POrder, preferred_uah: float) -> float | None:
         """
-        Check that the user's trade amount fits inside both orders' limits.
-        Returns (ok, reason_if_not_ok).
+        Find the best trade amount (UAH) that fits BOTH orders' min/max limits
+        and their available liquidity.  Returns None if no valid overlap exists.
+        Prefers the user's preferred_uah but adjusts up/down to satisfy constraints.
         """
         if buy.price <= 0 or sell.price <= 0:
-            return False, "invalid price"
+            return None
 
-        usdt_to_buy = amount_uah / buy.price
+        # UAH ranges from each order's declared limits
+        buy_min = buy.min_amount if buy.min_amount > 0 else 0.0
+        buy_max = buy.max_amount if buy.max_amount > 0 else float("inf")
+        sell_min = sell.min_amount if sell.min_amount > 0 else 0.0
+        sell_max = sell.max_amount if sell.max_amount > 0 else float("inf")
 
-        # Available USDT on the buy side must cover the trade
-        if buy.available_amount > 0 and usdt_to_buy > buy.available_amount:
-            return False, f"buy order only has {buy.available_amount:.1f} USDT, need {usdt_to_buy:.1f}"
+        # Cap by available USDT liquidity (convert to UAH at each order's price)
+        if buy.available_amount > 0:
+            buy_max = min(buy_max, buy.available_amount * buy.price)
+        if sell.available_amount > 0:
+            sell_max = min(sell_max, sell.available_amount * sell.price)
 
-        # Available USDT on the sell side must cover the trade
-        if sell.available_amount > 0 and usdt_to_buy > sell.available_amount:
-            return False, f"sell order only has {sell.available_amount:.1f} USDT, need {usdt_to_buy:.1f}"
+        # Intersection of both ranges
+        lo = max(buy_min, sell_min)
+        hi = min(buy_max, sell_max)
 
-        # Amount must be within the order limits (in UAH)
-        if buy.min_amount > 0 and amount_uah < buy.min_amount:
-            return False, f"amount {amount_uah:.0f} < buy min {buy.min_amount:.0f} UAH"
-        if buy.max_amount > 0 and amount_uah > buy.max_amount:
-            return False, f"amount {amount_uah:.0f} > buy max {buy.max_amount:.0f} UAH"
-        if sell.min_amount > 0 and amount_uah < sell.min_amount:
-            return False, f"amount {amount_uah:.0f} < sell min {sell.min_amount:.0f} UAH"
-        if sell.max_amount > 0 and amount_uah > sell.max_amount:
-            return False, f"amount {amount_uah:.0f} > sell max {sell.max_amount:.0f} UAH"
+        if lo > hi or hi <= 0:
+            return None  # No compatible amount exists
 
+        # Clamp user preference to the valid range
+        return max(lo, min(hi, preferred_uah))
+
+    def _amounts_compatible(self, buy: P2POrder, sell: P2POrder, amount_uah: float) -> tuple[bool, str]:
+        """Legacy wrapper — kept for callers that only need a bool."""
+        result = self._compatible_amount(buy, sell, amount_uah)
+        if result is None:
+            return False, "no compatible amount range"
         return True, ""
 
     def _best_network(self, exchange: str) -> str:
@@ -308,12 +316,12 @@ class ArbitrageEngine:
                     if sell.price <= buy.price:
                         continue
 
-                    compatible, reason = self._amounts_compatible(buy, sell, settings.amount_uah)
-                    if not compatible:
-                        logger.debug(f"[{exchange}] Amount incompatible: {reason}")
+                    trade_uah = self._compatible_amount(buy, sell, settings.amount_uah)
+                    if trade_uah is None:
+                        logger.debug(f"[{exchange}] No compatible amount range for orders")
                         continue
 
-                    calc = self._compute_p2p_profit(buy, sell, settings.amount_uah, settings.network, False)
+                    calc = self._compute_p2p_profit(buy, sell, trade_uah, settings.network, False)
 
                     if calc["profit_uah"] < settings.min_profit_uah:
                         continue
@@ -420,11 +428,11 @@ class ArbitrageEngine:
                         if sell.price <= buy.price:
                             continue
 
-                        compatible, reason = self._amounts_compatible(buy, sell, settings.amount_uah)
-                        if not compatible:
+                        trade_uah = self._compatible_amount(buy, sell, settings.amount_uah)
+                        if trade_uah is None:
                             continue
 
-                        calc = self._compute_p2p_profit(buy, sell, settings.amount_uah, settings.network, True)
+                        calc = self._compute_p2p_profit(buy, sell, trade_uah, settings.network, True)
 
                         if calc["profit_uah"] < settings.min_profit_uah:
                             continue
