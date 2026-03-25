@@ -89,6 +89,7 @@ class ArbitrageOpportunity:
     fees_breakdown: dict
     volatility_ok: bool = True
     network: str = "TRC20"
+    sell_payment_method: str = ""
     scanned_at: float = 0.0
     verified: bool = False
     verified_at: float = 0.0
@@ -110,7 +111,8 @@ class UserSettings:
     min_profit_uah: float = 50.0
     risk_level: str = "MEDIUM"
     exchanges: list[str] = field(default_factory=lambda: ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"])
-    banks: list[str] = field(default_factory=lambda: ["PrivatBank", "Monobank", "PUMB", "A-Bank"])
+    buy_banks: list[str] = field(default_factory=lambda: ["PrivatBank", "Monobank"])
+    sell_banks: list[str] = field(default_factory=lambda: ["PrivatBank", "Monobank"])
     network: str = "TRC20"
     scan_interval: int = 30
     notifications_enabled: bool = True
