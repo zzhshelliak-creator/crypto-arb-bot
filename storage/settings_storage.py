@@ -25,6 +25,7 @@ _ALL_DEFAULTS = {
     "trading_mode": "direct",
     "min_completion_rate": 90.0,
     "bank_fee_uah": 0.0,
+    "arb_types": ["p2p_same", "cross_exchange", "triangular"],
 }
 
 
@@ -47,6 +48,7 @@ def _raw_to_settings(raw: dict) -> UserSettings:
         trading_mode=str(merged["trading_mode"]),
         min_completion_rate=float(merged["min_completion_rate"]),
         bank_fee_uah=float(merged["bank_fee_uah"]),
+        arb_types=list(merged.get("arb_types", ["p2p_same", "cross_exchange", "triangular"])),
     )
 
 
