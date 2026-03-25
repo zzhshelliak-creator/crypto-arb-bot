@@ -804,6 +804,8 @@ class ArbitrageEngine:
             "triangular": len(tri_opps),
             "final": len(filtered),
             "exchanges_with_data": ex_counts,
+            "requested_exchanges": list(settings.exchanges),
+            "risk_level": settings.risk_level,
             "amount_uah": settings.amount_uah,
             "min_viable_amount": min_viable,
             "network": settings.network,
