@@ -117,7 +117,7 @@ _BANK_NORMALIZE: dict[str, str | None] = {
     "SenseSuperApp":          "Sense SuperApp",
     "BankVlasnyiRakhunok":    "Банківський рахунок",
     "Bank Vlasnyi Rakhunok":  "Банківський рахунок",
-    "Bank Transfer":          "Банківський переказ",
+    "Bank Transfer":          None,
     "Monobankiban":           "Monobank",
     "alliancecard":           "Alliance Card",
     "bank":                   None,  # занадто загальна назва — пропускаємо
