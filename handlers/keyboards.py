@@ -94,7 +94,7 @@ def opportunities_list_kb(opportunities, autoscan_running: bool = False) -> Inli
             if opp.buy_exchange == opp.sell_exchange:
                 label = f"#{i + 1}  {buy_ex}  {profit}"
             else:
-                label = f"#{i + 1}  {buy_ex}→{sell_ex}  {profit}"
+                label = f"#{i + 1}  {buy_ex} › {sell_ex}  {profit}"
             buttons.append([InlineKeyboardButton(text=label, callback_data=f"opp_detail_{i}")])
     else:
         # Зворотна сумісність — передали лише кількість
