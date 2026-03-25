@@ -45,6 +45,16 @@ def _save_settings():
         logger.warning(f"Failed to persist settings: {e}")
 
 
+async def _schedule_delete(chat_id: int, message_id: int, delay: int = 1800):
+    """Видаляє повідомлення через delay секунд (за замовчуванням 30 хв)."""
+    await asyncio.sleep(delay)
+    try:
+        await shared.bot_instance.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.debug(f"Auto-deleted message {message_id} in chat {chat_id} after {delay}s")
+    except Exception:
+        pass
+
+
 user_temp_trading_mode: dict[int, str] = {}
 
 # Auto-scan tracking
@@ -271,10 +281,14 @@ async def cb_scan_start(call: CallbackQuery):
             uid = call.from_user.id
             is_autoscan = uid in user_live_tasks and not user_live_tasks[uid].done()
             text = format_opportunities_list(opportunities)
+            text += "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
             await call.message.edit_text(
                 text,
                 reply_markup=opportunities_list_kb(opportunities, autoscan_running=is_autoscan),
                 parse_mode="HTML",
+            )
+            asyncio.create_task(
+                _schedule_delete(call.message.chat.id, call.message.message_id)
             )
     except Exception as e:
         logger.error(f"Scan error: {e}", exc_info=True)
@@ -494,24 +508,30 @@ async def _live_loop(chat_id: int, user_id: int):
                     f"скан #{scan_count} • запущено {elapsed} тому\n\n"
                     + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                     + f"\n\n🔍 Всього знайдено в цьому скані: {len(opps)}"
+                    + "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
                 )
-                await shared.bot_instance.send_message(
+                sent = await shared.bot_instance.send_message(
                     chat_id, alert_text,
                     parse_mode="HTML",
                     reply_markup=opportunities_list_kb(opps, autoscan_running=True),
                 )
+                asyncio.create_task(_schedule_delete(chat_id, sent.message_id))
 
                 # Notify participants
                 participants = get_participants(user_id)
                 for p in participants:
                     try:
-                        await shared.bot_instance.send_message(
-                            p["user_id"],
+                        p_text = (
                             f"🔔 <b>Live Alert від власника!</b>\n\n"
                             + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
-                            + f"\n\n🔍 Всього знайдено: {len(opps)}",
+                            + f"\n\n🔍 Всього знайдено: {len(opps)}"
+                            + "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
+                        )
+                        p_sent = await shared.bot_instance.send_message(
+                            p["user_id"], p_text,
                             parse_mode="HTML",
                         )
+                        asyncio.create_task(_schedule_delete(p["user_id"], p_sent.message_id))
                     except Exception as pe:
                         logger.warning(f"Failed to notify participant {p['user_id']}: {pe}")
 
