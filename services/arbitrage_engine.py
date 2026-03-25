@@ -729,23 +729,32 @@ class ArbitrageEngine:
             f"risk={settings.risk_level} | exchanges={settings.exchanges}"
         )
 
-        buy_task = self.api.fetch_all_p2p("BUY", settings.amount_uah, settings.exchanges, settings.banks)
-        sell_task = self.api.fetch_all_p2p("SELL", settings.amount_uah, settings.exchanges, settings.banks)
-        triangular_task = self.find_triangular(settings)
+        # Determine which arb types are enabled (default: all)
+        arb_types = set(getattr(settings, "arb_types", ["p2p_same", "cross_exchange", "triangular"]))
+        if not arb_types:
+            arb_types = {"p2p_same", "cross_exchange", "triangular"}
 
-        buy_orders, sell_orders, tri_opps = await asyncio.gather(
+        need_p2p = bool(arb_types & {"p2p_same", "cross_exchange"})
+        need_tri = "triangular" in arb_types
+
+        buy_task = self.api.fetch_all_p2p("BUY", settings.amount_uah, settings.exchanges, settings.banks) if need_p2p else asyncio.sleep(0)
+        sell_task = self.api.fetch_all_p2p("SELL", settings.amount_uah, settings.exchanges, settings.banks) if need_p2p else asyncio.sleep(0)
+        triangular_task = self.find_triangular(settings) if need_tri else asyncio.sleep(0)
+
+        buy_orders_raw, sell_orders_raw, tri_opps_raw = await asyncio.gather(
             buy_task, sell_task, triangular_task, return_exceptions=True
         )
 
-        if isinstance(buy_orders, Exception):
-            logger.error(f"Buy orders fetch failed: {buy_orders}")
-            buy_orders = []
-        if isinstance(sell_orders, Exception):
-            logger.error(f"Sell orders fetch failed: {sell_orders}")
-            sell_orders = []
-        if isinstance(tri_opps, Exception):
-            logger.warning(f"Triangular scan failed: {tri_opps}")
-            tri_opps = []
+        buy_orders = [] if (isinstance(buy_orders_raw, Exception) or not need_p2p) else list(buy_orders_raw or [])
+        sell_orders = [] if (isinstance(sell_orders_raw, Exception) or not need_p2p) else list(sell_orders_raw or [])
+        tri_opps = [] if (isinstance(tri_opps_raw, Exception) or not need_tri) else list(tri_opps_raw or [])
+
+        if need_p2p and isinstance(buy_orders_raw, Exception):
+            logger.error(f"Buy orders fetch failed: {buy_orders_raw}")
+        if need_p2p and isinstance(sell_orders_raw, Exception):
+            logger.error(f"Sell orders fetch failed: {sell_orders_raw}")
+        if need_tri and isinstance(tri_opps_raw, Exception):
+            logger.warning(f"Triangular scan failed: {tri_opps_raw}")
 
         self.last_buy_orders = list(buy_orders)
         self.last_sell_orders = list(sell_orders)
@@ -763,18 +772,19 @@ class ArbitrageEngine:
         trusted_sells = sum(1 for o in sell_orders if check_anti_scam(o, sell_prices, "SELL", mc)[0])
         logger.info(f"Trusted orders: {trusted_buys} buy, {trusted_sells} sell (after anti-scam)")
 
-        same_ex_task = self.find_p2p_to_p2p_same_exchange(buy_orders, sell_orders, settings)
-        cross_ex_task = self.find_cross_exchange(buy_orders, sell_orders, settings)
+        same_ex_task = self.find_p2p_to_p2p_same_exchange(buy_orders, sell_orders, settings) if "p2p_same" in arb_types else asyncio.sleep(0)
+        cross_ex_task = self.find_cross_exchange(buy_orders, sell_orders, settings) if "cross_exchange" in arb_types else asyncio.sleep(0)
 
-        same_ex_opps, cross_ex_opps = await asyncio.gather(
+        same_ex_raw, cross_ex_raw = await asyncio.gather(
             same_ex_task, cross_ex_task, return_exceptions=True
         )
-        if isinstance(same_ex_opps, Exception):
-            logger.error(f"Same-exchange scan error: {same_ex_opps}")
-            same_ex_opps = []
-        if isinstance(cross_ex_opps, Exception):
-            logger.error(f"Cross-exchange scan error: {cross_ex_opps}")
-            cross_ex_opps = []
+        same_ex_opps = [] if (isinstance(same_ex_raw, Exception) or "p2p_same" not in arb_types) else list(same_ex_raw or [])
+        cross_ex_opps = [] if (isinstance(cross_ex_raw, Exception) or "cross_exchange" not in arb_types) else list(cross_ex_raw or [])
+
+        if "p2p_same" in arb_types and isinstance(same_ex_raw, Exception):
+            logger.error(f"Same-exchange scan error: {same_ex_raw}")
+        if "cross_exchange" in arb_types and isinstance(cross_ex_raw, Exception):
+            logger.error(f"Cross-exchange scan error: {cross_ex_raw}")
 
         all_opps = list(same_ex_opps) + list(cross_ex_opps) + list(tri_opps)
 
