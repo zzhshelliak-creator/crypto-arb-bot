@@ -98,7 +98,7 @@ async def _live_countdown_and_delete(
         if remaining <= 5:
             break
         header = _countdown_line(expire_at)
-        new_text = header + "\n\n" + body_text
+        new_text = header + "\n—\n" + body_text
         try:
             await shared.bot_instance.edit_message_text(
                 chat_id=chat_id,
@@ -398,7 +398,7 @@ async def cb_scan_start(call: CallbackQuery):
             scan_stats = shared.arb_engine.last_scan_stats
             body = format_opportunities_list(opportunities)
             report = format_scan_report(scan_stats)
-            text = _expire_header() + "\n\n" + body + "\n\n" + report
+            text = _expire_header() + "\n—\n" + body + "\n—\n" + report
             await call.message.edit_text(
                 text,
                 reply_markup=opportunities_list_kb(opportunities, autoscan_running=is_autoscan),
@@ -626,10 +626,10 @@ async def _live_loop(chat_id: int, user_id: int):
                     f"скан #{scan_count} • запущено {elapsed} тому\n\n"
                     + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                     + f"\n\n🔍 Всього знайдено в цьому скані: {len(opps)}"
-                    + "\n\n" + scan_report
+                    + "\n—\n" + scan_report
                 )
                 alert_kb = opportunities_list_kb(opps, autoscan_running=True)
-                alert_text = _expire_header() + "\n\n" + alert_body
+                alert_text = _expire_header() + "\n—\n" + alert_body
                 sent = await shared.bot_instance.send_message(
                     chat_id, alert_text,
                     parse_mode="HTML",
@@ -648,7 +648,7 @@ async def _live_loop(chat_id: int, user_id: int):
                             + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                             + f"\n\n🔍 Всього знайдено: {len(opps)}"
                         )
-                        p_text = _expire_header() + "\n\n" + p_body
+                        p_text = _expire_header() + "\n—\n" + p_body
                         p_sent = await shared.bot_instance.send_message(
                             p["user_id"], p_text,
                             parse_mode="HTML",
