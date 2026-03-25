@@ -220,7 +220,10 @@ def settings_kb(settings=None) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=bankfee_label, callback_data="set_bank_fee"),
             InlineKeyboardButton(text="⏱ Авто-інтервал", callback_data="set_interval"),
         ],
-        [InlineKeyboardButton(text="🌟 Включити все (всі біржі + банки + мережі)", callback_data="select_all")],
+        [
+            InlineKeyboardButton(text="🔀 Типи арбітражу", callback_data="set_arb_types"),
+            InlineKeyboardButton(text="🌟 Включити все", callback_data="select_all"),
+        ],
         [InlineKeyboardButton(text="📋 Швидкі пресети", callback_data="set_presets")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
     ])
@@ -258,6 +261,28 @@ def network_kb(current: str = "") -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
+
+
+def arb_types_kb(selected: list[str]) -> InlineKeyboardMarkup:
+    ALL_TYPES = [
+        ("p2p_same",       "P2P › P2P (одна біржа)"),
+        ("cross_exchange",  "P2P крос-біржа"),
+        ("triangular",      "Triangular (Spot)"),
+    ]
+    buttons = []
+    for key, label in ALL_TYPES:
+        check = "✅" if key in selected else "☐"
+        buttons.append([InlineKeyboardButton(
+            text=f"{check} {label}", callback_data=f"arb_toggle_{key}"
+        )])
+    all_selected = all(k in selected for k, _ in ALL_TYPES)
+    all_label = "✅ Всі типи вибрано" if all_selected else "🌟 Вибрати всі типи"
+    buttons.append([InlineKeyboardButton(text=all_label, callback_data="arb_types_select_all")])
+    buttons.append([
+        InlineKeyboardButton(text="✔️ Зберегти", callback_data="arb_types_save"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def banks_kb(selected: list[str]) -> InlineKeyboardMarkup:
