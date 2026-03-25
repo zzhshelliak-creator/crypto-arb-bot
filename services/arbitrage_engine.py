@@ -105,11 +105,36 @@ def get_execution_ease(speed: SpeedType, liquidity_ok: bool) -> str:
     return "🔴 Hard"
 
 
+# Загальні назви які не є конкретним банком — ігноруємо
+_GENERIC_METHODS = {
+    "bank transfer", "банківський переказ", "банківський рахунок",
+    "bank", "transfer", "переказ", "wire transfer",
+}
+
+
 def find_common_payment_methods(buy_order: P2POrder, sell_order: P2POrder) -> list[str]:
-    buy_methods = set(m.lower().strip() for m in buy_order.payment_methods if m)
-    sell_methods = set(m.lower().strip() for m in sell_order.payment_methods if m)
-    common = buy_methods & sell_methods
+    """Повертає список конкретних банків які є і у продавця і у покупця (оригінальний регістр)."""
+    sell_lower = {m.lower().strip() for m in sell_order.payment_methods if m}
+    common = []
+    seen = set()
+    for m in buy_order.payment_methods:
+        if not m:
+            continue
+        key = m.lower().strip()
+        if key in _GENERIC_METHODS or key in seen:
+            continue
+        if key in sell_lower:
+            common.append(m)
+            seen.add(key)
     return sorted(common)
+
+
+def _pick_payment_method(order: P2POrder) -> str:
+    """Повертає першу конкретну назву банку з ордера (не 'Bank Transfer')."""
+    for m in order.payment_methods:
+        if m and m.lower().strip() not in _GENERIC_METHODS:
+            return m
+    return ""
 
 
 class ArbitrageEngine:
@@ -399,7 +424,7 @@ class ArbitrageEngine:
                             amount_usdt=calc["usdt_bought"],
                             buy_order=buy,
                             sell_order=sell,
-                            payment_method=buy.payment_methods[0] if buy.payment_methods else "Bank Transfer",
+                            payment_method=_pick_payment_method(buy),
                             execution_ease="",
                             speed=speed,
                             liquidity_ok=True,
