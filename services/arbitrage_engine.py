@@ -109,6 +109,7 @@ def get_execution_ease(speed: SpeedType, liquidity_ok: bool) -> str:
 _GENERIC_METHODS = {
     "bank transfer", "банківський переказ", "банківський рахунок",
     "bank", "transfer", "переказ", "wire transfer",
+    "банківський", "bank vlasnyi rakhunok", "bankvlasnyi rakhunok",
 }
 
 
@@ -147,6 +148,7 @@ def _pick_payment_method(order: P2POrder, user_banks: list[str] | None = None) -
     """
     Повертає першу конкретну назву банку з ордера яка є у списку банків користувача.
     Якщо user_banks не задано — повертає першу не-generic назву.
+    Якщо user_banks задано але жоден не збігся — повертає "" (не підставляємо чужий банк).
     """
     user_lower = {b.lower().strip() for b in user_banks} if user_banks else None
     for m in order.payment_methods:
@@ -157,11 +159,14 @@ def _pick_payment_method(order: P2POrder, user_banks: list[str] | None = None) -
             continue
         if user_lower is not None and key not in user_lower:
             continue
-        return m
-    # fallback — будь-яка не-generic назва якщо нічого не збіглось
+        return m.strip()
+    # Якщо user_banks заданий — не використовуємо fallback, повертаємо ""
+    if user_lower:
+        return ""
+    # Якщо фільтр не заданий — повертаємо першу не-generic назву
     for m in order.payment_methods:
-        if m and m.lower().strip() not in _GENERIC_METHODS:
-            return m
+        if m and m.strip() and m.lower().strip() not in _GENERIC_METHODS:
+            return m.strip()
     return ""
 
 
@@ -682,7 +687,7 @@ class ArbitrageEngine:
                         continue
                     if sell.price <= buy.price:
                         continue
-                    common = find_common_payment_methods(buy, sell)
+                    common = find_common_payment_methods(buy, sell, settings.banks or None)
                     if not common:
                         continue
                     calc = self._compute_p2p_profit(buy, sell, settings.amount_uah, settings.network, False)
