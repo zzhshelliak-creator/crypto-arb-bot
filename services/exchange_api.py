@@ -39,6 +39,19 @@ def _cache_set(key: str, data):
     CACHE[key] = {"data": data, "ts": time.time()}
 
 
+def clear_exchange_cache(exchanges: list[str]) -> int:
+    """Видаляє кешовані P2P дані для зазначених бірж, щоб наступний запит пішов напряму до API."""
+    removed = 0
+    keys_to_del = [
+        k for k in list(CACHE.keys())
+        if any(ex.lower() in k.lower() for ex in exchanges)
+    ]
+    for k in keys_to_del:
+        CACHE.pop(k, None)
+        removed += 1
+    return removed
+
+
 def _banks_key(banks: list[str]) -> str:
     return "_".join(sorted(b.lower() for b in banks)) if banks else "all"
 
