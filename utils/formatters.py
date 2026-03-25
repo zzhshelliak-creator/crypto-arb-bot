@@ -1,6 +1,21 @@
 import time
 from models.types import ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType
 
+# Generic payment labels that are NOT specific bank names — never show these
+_GENERIC_BANK_LABELS = {
+    "bank transfer", "банківський переказ", "банківський рахунок",
+    "bank", "transfer", "переказ", "wire transfer",
+    "банківський", "bank vlasnyi rakhunok", "bankvlasnyi rakhunok",
+}
+
+
+def _real_banks(payment_methods: list[str]) -> list[str]:
+    """Return only real (specific) bank names, filtering out generic labels."""
+    if not payment_methods:
+        return []
+    return [m for m in payment_methods if m and m.lower().strip() not in _GENERIC_BANK_LABELS]
+
+
 BANK_COMMISSIONS = {
     "PrivatBank": 0.0,
     "Monobank": 0.0,
@@ -55,8 +70,13 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
     # Gross profit (before any fees)
     gross_profit = opp.spread * opp.amount_usdt
 
-    # Bank fee based on payment method commission + manual extra fee
-    payment = opp.payment_method or "—"
+    # Collect ALL real bank names from the buy order (filter out generic labels)
+    buy_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
+    # Primary payment method — first real bank (for commission calc & steps)
+    payment = buy_banks[0] if buy_banks else (opp.payment_method if opp.payment_method not in _GENERIC_BANK_LABELS else "")
+    payment = payment or "—"
+    # Display: all real banks separated by " | "
+    banks_display = " | ".join(buy_banks) if buy_banks else payment
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
     bank_fee_uah = amount_uah_approx * bank_commission_pct / 100 + extra_bank_fee_uah
@@ -150,7 +170,7 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
         f"├ Відповідь: {release_str} ✅\n"
         f"└ Ризик: {risk_emoji} {risk_str}\n\n"
 
-        f"🏦 Платіж: {payment}\n"
+        f"🏦 Платіж: {banks_display}\n"
         f"👥 Учасник: Я\n\n"
 
         f"📋 <b>Кроки:</b>\n"
