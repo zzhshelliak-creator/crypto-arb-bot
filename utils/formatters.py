@@ -287,8 +287,9 @@ def format_scan_report(stats: dict) -> str:
 
     # ── Підказка про проксі ─────────────────────────────────────
     if proxy_needed:
+        lines.append("—")
         lines.append(
-            f"\n<i>💡 Встанови PROXY_URL щоб розблокувати: {', '.join(proxy_needed)}</i>"
+            f"<i>💡 Встанови PROXY_URL щоб розблокувати: {', '.join(proxy_needed)}</i>"
         )
 
     return "\n".join(lines)
