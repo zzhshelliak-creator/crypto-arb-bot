@@ -56,24 +56,30 @@ def _build_steps(
 
     if is_cross:
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} › {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
-            f"3. Переказ {opp.network} → {sell_ex}",
+            f"3. Переказ {opp.network} › {sell_ex}",
             f"4. Продати @ {opp.sell_price:.2f} UAH",
             f"5. +{net_profit:.0f} UAH (+{net_profit_pct:.2f}%) ✅",
         ])
     else:
         sell_nick = opp.sell_order.nickname if opp.sell_order else "покупець"
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} › {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
-            f"3. Виставити на продаж → {sell_nick} @ {opp.sell_price:.2f}",
+            f"3. Виставити на продаж › {sell_nick} @ {opp.sell_price:.2f}",
             f"4. Отримати {opp.amount_usdt * opp.sell_price:,.0f} UAH",
             f"5. +{net_profit:.0f} UAH (+{net_profit_pct:.2f}%) ✅",
         ])
 
 
-def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: str = "direct", extra_bank_fee_uah: float = 0.0) -> str:
+def format_opportunity(
+    opp: ArbitrageOpportunity,
+    index: int = 1,
+    trading_mode: str = "direct",
+    extra_bank_fee_uah: float = 0.0,
+    user_banks: list[str] | None = None,
+) -> str:
     risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(
         opp.risk.value if hasattr(opp.risk, "value") else str(opp.risk), "⚪"
     )
@@ -83,22 +89,30 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
     buy_ex = opp.buy_exchange
     sell_ex = opp.sell_exchange
     is_cross = buy_ex != sell_ex
-    exchange_line = f"Біржа: {buy_ex} → {sell_ex}" if is_cross else f"Біржа: {buy_ex}"
+    exchange_line = f"Біржа: {buy_ex} › {sell_ex}" if is_cross else f"Біржа: {buy_ex}"
 
     # Gross profit (before any fees)
     gross_profit = opp.spread * opp.amount_usdt
 
-    # Collect ALL real bank names from buy order (filters generic labels case-insensitively)
+    # Collect ALL real bank names from buy order
     buy_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
 
-    # Primary payment — first real bank; fall back to opp.payment_method only if it's a real bank
-    if buy_banks:
+    # Primary payment — use opp.payment_method (already filtered by engine per user_banks).
+    # Fall back to first real bank only when payment_method is empty/generic.
+    payment = _clean_payment(opp.payment_method)
+    if not payment and buy_banks:
         payment = buy_banks[0]
-    else:
-        payment = _clean_payment(opp.payment_method)   # strips "Bank Transfer" etc. case-insensitively
 
-    # Display: all real banks  OR  "—" when seller only accepts generic transfer
-    banks_display = " | ".join(buy_banks) if buy_banks else ("—" if not payment else payment)
+    # banks_display: user-matching banks FIRST (★), then the rest — so filter is always visible
+    if user_banks and buy_banks:
+        user_lower = {b.lower().strip() for b in user_banks}
+        matching = [b for b in buy_banks if b.lower().strip() in user_lower]
+        others   = [b for b in buy_banks if b.lower().strip() not in user_lower]
+        display_banks = matching + others
+    else:
+        display_banks = buy_banks
+
+    banks_display = " | ".join(display_banks) if display_banks else ("—" if not payment else payment)
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
     bank_fee_uah = amount_uah_approx * bank_commission_pct / 100 + extra_bank_fee_uah
