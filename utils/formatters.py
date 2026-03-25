@@ -106,25 +106,28 @@ def format_opportunity(
     # Gross profit (before any fees)
     gross_profit = opp.spread * opp.amount_usdt
 
-    # Collect ALL real bank names from buy order
+    # Collect ALL real bank names from buy order (seller's banks)
     buy_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
 
     # Primary payment — use opp.payment_method (already filtered by engine per user_banks).
-    # Fall back to first real bank only when payment_method is empty/generic.
+    # Fall back: if user_banks given, pick first matching; else first real bank.
     payment = _clean_payment(opp.payment_method)
     if not payment and buy_banks:
-        payment = buy_banks[0]
+        if user_banks:
+            user_lower_set = {b.lower().strip() for b in user_banks}
+            payment = next((b for b in buy_banks if b.lower().strip() in user_lower_set), "")
+        if not payment:
+            payment = buy_banks[0]
 
-    # banks_display: user-matching banks FIRST (★), then the rest — so filter is always visible
+    # seller_banks_display: all seller's banks, user-matched ones FIRST
     if user_banks and buy_banks:
         user_lower = {b.lower().strip() for b in user_banks}
         matching = [b for b in buy_banks if b.lower().strip() in user_lower]
         others   = [b for b in buy_banks if b.lower().strip() not in user_lower]
-        display_banks = matching + others
+        seller_banks_display = " | ".join(matching + others) if (matching or others) else "—"
     else:
-        display_banks = buy_banks
+        seller_banks_display = " | ".join(buy_banks) if buy_banks else "—"
 
-    banks_display = " | ".join(display_banks) if display_banks else ("—" if not payment else payment)
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
     bank_fee_uah = amount_uah_approx * bank_commission_pct / 100 + extra_bank_fee_uah
@@ -219,8 +222,9 @@ def format_opportunity(
         f"├ Відповідь: {release_str} ✅\n"
         f"└ Ризик: {risk_emoji} {risk_str}\n\n"
 
-        f"🏦 Платіж: {banks_display}\n"
-        f"👥 Учасник: Я\n\n"
+        f"🏦 Платіж: {payment if payment else '—'}\n"
+        + (f"└─ Продавець приймає: {seller_banks_display}\n" if buy_banks else "")
+        + f"👥 Учасник: Я\n\n"
 
         f"📋 <b>Кроки:</b>\n"
         f"{steps}\n\n"
