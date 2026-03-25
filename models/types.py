@@ -4,9 +4,9 @@ from enum import Enum
 
 
 class ArbitrageType(str, Enum):
-    P2P_TO_P2P = "P2P → P2P"
+    P2P_TO_P2P = "P2P › P2P"
     CROSS_EXCHANGE = "Cross-Exchange"
-    P2P_SPOT_P2P = "P2P → Spot → P2P"
+    P2P_SPOT_P2P = "P2P › Spot › P2P"
     TRIANGULAR = "Triangular"
 
 
