@@ -227,12 +227,12 @@ async def cmd_help(message: Message):
 
 <b>📊 АРБІТРАЖ & СКАНУВАННЯ</b>
 ✅ Сканування з 8 бірж: Binance, Bybit, OKX, Bitget, MEXC, Gate.io, HTX, KuCoin
-✅ 4 типи арбітражу (P2P↔P2P, Same-exchange, P2P→Spot, Triangular)
+✅ 4 типи арбітражу (P2P↔P2P, Same-exchange, P2P › Spot, Triangular)
 ✅ Live Mode 24/7 з автосповіщеннями
 
 <b>💰 РОЗРАХУНКИ</b>
 ✅ Точна математика ПІСЛЯ всіх комісій (мережа, банк, спот)
-✅ Показує дві біржи в арбітражі: 🔀 Binance → Bybit
+✅ Показує дві біржи в арбітражі: 🔀 Binance › Bybit
 ✅ Реалізм: ТІЛЬКИ профітні ордери (не теоретичні)
 
 <b>🛡️ АНТИ-СКАМ ФІЛЬТРИ</b>
@@ -335,7 +335,7 @@ async def cb_scan_start(call: CallbackQuery):
 
             text = (
                 f"😔 <b>За твоїми фільтрами — 0 можливостей</b>\n\n"
-                f"📊 Сканування: {stats.get('total_raw', 0)} ордерів → "
+                f"📊 Сканування: {stats.get('total_raw', 0)} ордерів › "
                 f"{stats.get('trusted_buys', 0)} buy / {stats.get('trusted_sells', 0)} sell пройшли анти-скам"
                 f"{amount_warn}\n\n"
             )
@@ -358,7 +358,7 @@ async def cb_scan_start(call: CallbackQuery):
                         profit_str = f"{profit:,.0f} грн"
 
                     if is_cross:
-                        pair_str = f"🔀 {b_ex} → {s_ex}"
+                        pair_str = f"🔀 {b_ex} › {s_ex}"
                         fee_note = f" (мережева комісія: {c['network_fee_uah']:.0f} грн)"
                     else:
                         pair_str = f"🔄 {b_ex}"
