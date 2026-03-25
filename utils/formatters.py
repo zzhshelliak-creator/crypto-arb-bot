@@ -85,12 +85,14 @@ def _build_steps(
         ])
 
 
-def format_opportunity(
+def format_opportunity(  # noqa: C901
     opp: ArbitrageOpportunity,
     index: int = 1,
     trading_mode: str = "direct",
     extra_bank_fee_uah: float = 0.0,
     user_banks: list[str] | None = None,
+    buy_banks: list[str] | None = None,
+    sell_banks: list[str] | None = None,
 ) -> str:
     risk_emoji = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(
         opp.risk.value if hasattr(opp.risk, "value") else str(opp.risk), "⚪"
@@ -106,27 +108,43 @@ def format_opportunity(
     # Gross profit (before any fees)
     gross_profit = opp.spread * opp.amount_usdt
 
-    # Collect ALL real bank names from buy order (seller's banks)
-    buy_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
+    # Resolve effective buy/sell bank lists (prefer explicit over legacy user_banks)
+    eff_buy_banks = buy_banks or user_banks or []
+    eff_sell_banks = sell_banks or user_banks or []
 
-    # Primary payment — use opp.payment_method (already filtered by engine per user_banks).
-    # Fall back: if user_banks given, pick first matching; else first real bank.
-    payment = _clean_payment(opp.payment_method)
-    if not payment and buy_banks:
-        if user_banks:
-            user_lower_set = {b.lower().strip() for b in user_banks}
-            payment = next((b for b in buy_banks if b.lower().strip() in user_lower_set), "")
-        if not payment:
-            payment = buy_banks[0]
+    # Collect ALL real bank names from buy order (seller's accepted banks)
+    seller_real_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
+    buyer_real_banks = _real_banks(opp.sell_order.payment_methods if opp.sell_order else [])
+
+    # Buy payment: bank user pays with when buying USDT
+    buy_payment = _clean_payment(opp.payment_method)
+    if not buy_payment and seller_real_banks:
+        if eff_buy_banks:
+            ubl = {b.lower().strip() for b in eff_buy_banks}
+            buy_payment = next((b for b in seller_real_banks if b.lower().strip() in ubl), "")
+        if not buy_payment:
+            buy_payment = seller_real_banks[0]
+
+    # Sell payment: bank user receives money into when selling USDT
+    sell_payment = _clean_payment(opp.sell_payment_method)
+    if not sell_payment and buyer_real_banks:
+        if eff_sell_banks:
+            sbl = {b.lower().strip() for b in eff_sell_banks}
+            sell_payment = next((b for b in buyer_real_banks if b.lower().strip() in sbl), "")
+        if not sell_payment and buyer_real_banks:
+            sell_payment = buyer_real_banks[0]
+
+    # Fall back for display if no sell side (e.g. spot/cross)
+    payment = buy_payment
 
     # seller_banks_display: all seller's banks, user-matched ones FIRST
-    if user_banks and buy_banks:
-        user_lower = {b.lower().strip() for b in user_banks}
-        matching = [b for b in buy_banks if b.lower().strip() in user_lower]
-        others   = [b for b in buy_banks if b.lower().strip() not in user_lower]
+    if eff_buy_banks and seller_real_banks:
+        user_lower = {b.lower().strip() for b in eff_buy_banks}
+        matching = [b for b in seller_real_banks if b.lower().strip() in user_lower]
+        others   = [b for b in seller_real_banks if b.lower().strip() not in user_lower]
         seller_banks_display = " | ".join(matching + others) if (matching or others) else "—"
     else:
-        seller_banks_display = " | ".join(buy_banks) if buy_banks else "—"
+        seller_banks_display = " | ".join(seller_real_banks) if seller_real_banks else "—"
 
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
@@ -232,8 +250,9 @@ def format_opportunity(
         f"├ Відповідь: {release_str} ✅\n"
         f"└ Ризик: {risk_emoji} {risk_str}\n\n"
 
-        f"🏦 Платіж: {payment if payment else '—'}\n"
-        + (f"└─ Продавець приймає: {seller_banks_display}\n" if buy_banks else "")
+        f"🏦 Купівля (банк оплати): {buy_payment if buy_payment else '—'}\n"
+        + (f"├─ Продавець приймає: {seller_banks_display}\n" if seller_real_banks else "")
+        + (f"🏦 Продаж (банк отримання): {sell_payment if sell_payment else '—'}\n" if sell_payment else "")
         + f"👥 Учасник: Я\n\n"
 
         f"📋 <b>Кроки:</b>\n"
@@ -357,7 +376,8 @@ def format_analytics(stats: dict) -> str:
 
 
 def format_settings(settings) -> str:
-    banks = ", ".join(settings.banks) if settings.banks else "Всі"
+    buy_banks = ", ".join(settings.buy_banks) if settings.buy_banks else "Всі"
+    sell_banks = ", ".join(settings.sell_banks) if settings.sell_banks else "Всі"
     exchanges = ", ".join(settings.exchanges) if settings.exchanges else "Всі"
     mode_text = "🤝 Напряму (я купую/продаю)" if settings.trading_mode == "direct" else "🛡️ Як 3 особа (гарант)"
     network_text = "🌟 Всі мережі (автовибір)" if settings.network == "ALL" else settings.network
@@ -371,7 +391,8 @@ def format_settings(settings) -> str:
         f"⚠️ Ризик: <b>{settings.risk_level}</b>\n"
         f"🛡 Анті-скам: <b>{mc:.0f}%</b>\n"
         f"🏧 Комісія банку: <b>{bank_fee_text}</b>\n"
-        f"🏦 Банки: <b>{banks}</b>\n"
+        f"🏦 Банк купівлі: <b>{buy_banks}</b>\n"
+        f"🏦 Банк продажу: <b>{sell_banks}</b>\n"
         f"🌐 Мережа: <b>{network_text}</b>\n"
         f"🛡️ Тип: <b>{mode_text}</b>\n"
         f"🔄 Інтервал: <b>{settings.scan_interval} сек</b>\n"
