@@ -39,6 +39,9 @@ user_temp_exchanges: dict[int, list] = {}
 user_temp_arb_types: dict[int, list] = {}
 
 
+_OPP_TTL_SECONDS = 90   # Opportunity notification lives for 90 seconds
+
+
 def _save_settings():
     """Persist all user settings to disk (non-blocking, best-effort)."""
     try:
@@ -55,9 +58,6 @@ async def _schedule_delete(chat_id: int, message_id: int, delay: int = _OPP_TTL_
         logger.debug(f"Auto-deleted message {message_id} in chat {chat_id} after {delay}s")
     except Exception:
         pass
-
-
-_OPP_TTL_SECONDS = 90   # Opportunity notification lives for 90 seconds
 
 
 def _expire_header(delay: int = _OPP_TTL_SECONDS) -> str:
