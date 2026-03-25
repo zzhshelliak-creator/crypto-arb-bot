@@ -56,6 +56,7 @@ def _raw_to_settings(raw: dict) -> UserSettings:
         min_completion_rate=float(merged["min_completion_rate"]),
         bank_fee_uah=float(merged["bank_fee_uah"]),
         arb_types=list(merged.get("arb_types", ["p2p_same", "cross_exchange", "triangular"])),
+        main_msg_id=merged.get("main_msg_id"),
     )
 
 
