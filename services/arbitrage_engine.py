@@ -112,9 +112,20 @@ _GENERIC_METHODS = {
 }
 
 
-def find_common_payment_methods(buy_order: P2POrder, sell_order: P2POrder) -> list[str]:
-    """Повертає список конкретних банків які є і у продавця і у покупця (оригінальний регістр)."""
+def find_common_payment_methods(
+    buy_order: P2POrder,
+    sell_order: P2POrder,
+    user_banks: list[str] | None = None,
+) -> list[str]:
+    """
+    Повертає банки які є одночасно:
+      - у продавця buy-ордера
+      - у покупця sell-ордера
+      - у списку банків користувача (user_banks)
+    Виключає загальні назви ('Bank Transfer' тощо).
+    """
     sell_lower = {m.lower().strip() for m in sell_order.payment_methods if m}
+    user_lower = {b.lower().strip() for b in user_banks} if user_banks else None
     common = []
     seen = set()
     for m in buy_order.payment_methods:
@@ -123,14 +134,31 @@ def find_common_payment_methods(buy_order: P2POrder, sell_order: P2POrder) -> li
         key = m.lower().strip()
         if key in _GENERIC_METHODS or key in seen:
             continue
-        if key in sell_lower:
-            common.append(m)
-            seen.add(key)
+        if key not in sell_lower:
+            continue
+        if user_lower is not None and key not in user_lower:
+            continue
+        common.append(m)
+        seen.add(key)
     return sorted(common)
 
 
-def _pick_payment_method(order: P2POrder) -> str:
-    """Повертає першу конкретну назву банку з ордера (не 'Bank Transfer')."""
+def _pick_payment_method(order: P2POrder, user_banks: list[str] | None = None) -> str:
+    """
+    Повертає першу конкретну назву банку з ордера яка є у списку банків користувача.
+    Якщо user_banks не задано — повертає першу не-generic назву.
+    """
+    user_lower = {b.lower().strip() for b in user_banks} if user_banks else None
+    for m in order.payment_methods:
+        if not m:
+            continue
+        key = m.lower().strip()
+        if key in _GENERIC_METHODS:
+            continue
+        if user_lower is not None and key not in user_lower:
+            continue
+        return m
+    # fallback — будь-яка не-generic назва якщо нічого не збіглось
     for m in order.payment_methods:
         if m and m.lower().strip() not in _GENERIC_METHODS:
             return m
@@ -270,8 +298,8 @@ class ArbitrageEngine:
                         logger.debug(f"[{exchange}] SELL {sell.nickname} rejected: {reason}")
                         continue
 
-                    # Same-exchange P2P requires a shared bank
-                    common_methods = find_common_payment_methods(buy, sell)
+                    # Same-exchange P2P requires a shared bank (filtered by user settings)
+                    common_methods = find_common_payment_methods(buy, sell, settings.banks)
                     if not common_methods:
                         logger.debug(f"[{exchange}] No common payment methods between {buy.nickname} and {sell.nickname}")
                         continue
@@ -424,7 +452,7 @@ class ArbitrageEngine:
                             amount_usdt=calc["usdt_bought"],
                             buy_order=buy,
                             sell_order=sell,
-                            payment_method=_pick_payment_method(buy),
+                            payment_method=_pick_payment_method(buy, settings.banks),
                             execution_ease="",
                             speed=speed,
                             liquidity_ok=True,
