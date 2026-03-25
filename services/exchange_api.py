@@ -56,15 +56,30 @@ def _banks_key(banks: list[str]) -> str:
     return "_".join(sorted(b.lower() for b in banks)) if banks else "all"
 
 
+# Generic payment labels that are NOT specific banks — never count as a match for a user's bank filter.
+# Must stay in sync with _GENERIC_METHODS in arbitrage_engine.py and _GENERIC_BANK_LABELS in formatters.py
+_GENERIC_PAYMENT_KEYS: set[str] = {
+    "bank transfer", "банківський переказ", "банківський рахунок",
+    "bank", "transfer", "переказ", "wire transfer",
+    "банківський", "bank vlasnyi rakhunok", "bankvlasnyi rakhunok",
+}
+
+
 def _bank_match(pay_methods: list[str], banks: list[str]) -> bool:
+    """Return True if at least one user-selected bank is explicitly present in the order.
+
+    Rules:
+    - If user has no bank filter → accept any order.
+    - Generic payment labels (e.g. 'Банківський переказ', 'bank transfer') are never
+      counted as a concrete bank, even if they appear in pay_methods.
+    - An order whose payment methods are *only* generic labels is rejected when the
+      user has a bank filter (because no specific bank from the filter matches).
+    """
     if not banks:
         return True
-    pay_lower = [m.lower() for m in pay_methods]
-    for bank in banks:
-        b = bank.lower()
-        if any(b in p or p in b for p in pay_lower):
-            return True
-    return False
+    # Only specific (non-generic) methods count toward a match
+    specific = {m.lower().strip() for m in pay_methods if m and m.lower().strip() not in _GENERIC_PAYMENT_KEYS}
+    return any(b.lower().strip() in specific for b in banks)
 
 
 NETWORK_FEES = {
@@ -145,14 +160,9 @@ _BANK_NORMALIZE: dict[str, str | None] = {
     "RaiffeisenBankAval":     "Raiffeisen",
     "Raiffaizen":             "Raiffeisen",
     "SenseSuperApp":          "Sense SuperApp",
-    "BankVlasnyiRakhunok":    None,   # банківський рахунок — generic
-    "Bank Vlasnyi Rakhunok":  None,   # generic
+    "BankVlasnyiRakhunok":    "Банківський рахунок",
+    "Bank Vlasnyi Rakhunok":  "Банківський рахунок",
     "Bank Transfer":          None,   # generic — не конкретний банк
-    "bank transfer":          None,
-    "Банківський переказ":    None,   # Bybit ID=1 — generic wire transfer
-    "банківський переказ":    None,
-    "Банківський рахунок":    None,
-    "банківський рахунок":    None,
     "Monobankiban":           "Monobank",
     "alliancecard":           "Alliance Card",
     "bank":                   None,   # занадто загальна назва — пропускаємо
