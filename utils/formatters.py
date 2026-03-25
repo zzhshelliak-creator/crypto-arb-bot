@@ -16,6 +16,13 @@ def _real_banks(payment_methods: list[str]) -> list[str]:
     return [m for m in payment_methods if m and m.lower().strip() not in _GENERIC_BANK_LABELS]
 
 
+def _clean_payment(raw: str) -> str:
+    """Return empty string if raw is a generic/non-bank label (case-insensitive)."""
+    if not raw:
+        return ""
+    return "" if raw.lower().strip() in _GENERIC_BANK_LABELS else raw
+
+
 BANK_COMMISSIONS = {
     "PrivatBank": 0.0,
     "Monobank": 0.0,
@@ -26,19 +33,27 @@ BANK_COMMISSIONS = {
 }
 
 
-def _build_steps(opp: ArbitrageOpportunity, trading_mode: str, net_profit: float, net_profit_pct: float) -> str:
-    payment = opp.payment_method
+def _build_steps(
+    opp: ArbitrageOpportunity,
+    trading_mode: str,
+    net_profit: float,
+    net_profit_pct: float,
+    payment: str = "",          # filtered bank name — passed from format_opportunity
+) -> str:
     buy_ex = opp.buy_exchange
     sell_ex = opp.sell_exchange
     is_cross = buy_ex != sell_ex
     amount_uah_approx = opp.amount_usdt * opp.buy_price
 
     seller_nick = opp.buy_order.nickname if opp.buy_order else "продавець"
-    pay_via = f"через {payment}" if payment and payment != "—" else "UAH"
+    # Only show "через BankName" when a real bank is known
+    pay_via = f"через {payment}" if payment and payment not in ("—", "") else ""
+
+    step1_suffix = f" {pay_via}" if pay_via else ""
 
     if is_cross:
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH {pay_via} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} → {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
             f"3. Переказ {opp.network} → {sell_ex}",
             f"4. Продати @ {opp.sell_price:.2f} UAH",
@@ -47,7 +62,7 @@ def _build_steps(opp: ArbitrageOpportunity, trading_mode: str, net_profit: float
     else:
         sell_nick = opp.sell_order.nickname if opp.sell_order else "покупець"
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH {pay_via} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH{step1_suffix} → {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
             f"3. Виставити на продаж → {sell_nick} @ {opp.sell_price:.2f}",
             f"4. Отримати {opp.amount_usdt * opp.sell_price:,.0f} UAH",
@@ -70,13 +85,17 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
     # Gross profit (before any fees)
     gross_profit = opp.spread * opp.amount_usdt
 
-    # Collect ALL real bank names from the buy order (filter out generic labels)
+    # Collect ALL real bank names from buy order (filters generic labels case-insensitively)
     buy_banks = _real_banks(opp.buy_order.payment_methods if opp.buy_order else [])
-    # Primary payment method — first real bank (for commission calc & steps)
-    payment = buy_banks[0] if buy_banks else (opp.payment_method if opp.payment_method not in _GENERIC_BANK_LABELS else "")
-    payment = payment or "—"
-    # Display: all real banks separated by " | "
-    banks_display = " | ".join(buy_banks) if buy_banks else payment
+
+    # Primary payment — first real bank; fall back to opp.payment_method only if it's a real bank
+    if buy_banks:
+        payment = buy_banks[0]
+    else:
+        payment = _clean_payment(opp.payment_method)   # strips "Bank Transfer" etc. case-insensitively
+
+    # Display: all real banks  OR  "—" when seller only accepts generic transfer
+    banks_display = " | ".join(buy_banks) if buy_banks else ("—" if not payment else payment)
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
     bank_fee_uah = amount_uah_approx * bank_commission_pct / 100 + extra_bank_fee_uah
@@ -109,19 +128,20 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
     score_bar = "█" * filled + "░" * (10 - filled)
 
     # Fees section lines
+    bank_label = f"Банк ({payment})" if payment else "Банк"
     if bank_fee_uah > 0:
         pct_part = f" ({bank_commission_pct:.1f}%)" if bank_commission_pct > 0 else ""
         manual_part = f" +{extra_bank_fee_uah:.0f} грн вруч." if extra_bank_fee_uah > 0 else ""
-        bank_line = f"├ Банк ({payment}): -{bank_fee_uah:.0f} UAH{pct_part}{manual_part}"
+        bank_line = f"├ {bank_label}: -{bank_fee_uah:.0f} UAH{pct_part}{manual_part}"
     else:
-        bank_line = f"├ Банк ({payment}): 0 UAH (0%)"
+        bank_line = f"├ {bank_label}: 0 UAH (0%)"
 
     if net_fee_uah > 0:
         net_line = f"├ Мережа ({network}): -{net_fee_uah:.0f} UAH"
     else:
         net_line = f"├ Мережа ({network}): 0 UAH"
 
-    steps = _build_steps(opp, trading_mode, net_profit, net_profit_pct)
+    steps = _build_steps(opp, trading_mode, net_profit, net_profit_pct, payment)
 
     # Verification status line
     if opp.verified and opp.verified_at > 0:
