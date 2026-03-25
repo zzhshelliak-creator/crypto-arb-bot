@@ -18,7 +18,8 @@ _ALL_DEFAULTS = {
     "min_profit_uah": 50.0,
     "risk_level": "MEDIUM",
     "exchanges": ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"],
-    "banks": ["PrivatBank", "Monobank", "PUMB", "A-Bank"],
+    "buy_banks": ["PrivatBank", "Monobank"],
+    "sell_banks": ["PrivatBank", "Monobank"],
     "network": "TRC20",
     "scan_interval": 30,
     "notifications_enabled": True,
@@ -36,12 +37,18 @@ def _ensure_dir():
 def _raw_to_settings(raw: dict) -> UserSettings:
     """Convert raw dict → UserSettings, applying defaults for missing keys."""
     merged = {**_ALL_DEFAULTS, **raw}
+    # Backward compat: old "banks" field → buy_banks + sell_banks
+    if "banks" in raw and "buy_banks" not in raw:
+        merged["buy_banks"] = list(raw["banks"])
+    if "banks" in raw and "sell_banks" not in raw:
+        merged["sell_banks"] = list(raw["banks"])
     return UserSettings(
         amount_uah=float(merged["amount_uah"]),
         min_profit_uah=float(merged["min_profit_uah"]),
         risk_level=str(merged["risk_level"]),
         exchanges=list(merged["exchanges"]),
-        banks=list(merged["banks"]),
+        buy_banks=list(merged["buy_banks"]),
+        sell_banks=list(merged["sell_banks"]),
         network=str(merged["network"]),
         scan_interval=int(merged["scan_interval"]),
         notifications_enabled=bool(merged["notifications_enabled"]),
