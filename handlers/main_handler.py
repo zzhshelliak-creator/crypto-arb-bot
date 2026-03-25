@@ -47,7 +47,7 @@ def _save_settings():
         logger.warning(f"Failed to persist settings: {e}")
 
 
-async def _schedule_delete(chat_id: int, message_id: int, delay: int = 1800):
+async def _schedule_delete(chat_id: int, message_id: int, delay: int = _OPP_TTL_SECONDS):
     """Видаляє повідомлення через delay секунд (за замовчуванням 30 хв)."""
     await asyncio.sleep(delay)
     try:
@@ -57,26 +57,31 @@ async def _schedule_delete(chat_id: int, message_id: int, delay: int = 1800):
         pass
 
 
-def _expire_header(delay: int = 1800) -> str:
-    """Статичний рядок-шапка з часом закінчення (для основного вікна)."""
+_OPP_TTL_SECONDS = 90   # Opportunity notification lives for 90 seconds
+
+
+def _expire_header(delay: int = _OPP_TTL_SECONDS) -> str:
+    """Статичний рядок-шапка з часом закінчення."""
     expire_at = time.time() + delay
-    expire_hm = time.strftime("%H:%M", time.localtime(expire_at))
-    mins = delay // 60
-    return f"⏳ <b>Список активний ще {mins} хв</b> • автовидалення о {expire_hm}"
+    expire_hm = time.strftime("%H:%M:%S", time.localtime(expire_at))
+    return f"🔴 <b>АКТУАЛЬНО {delay} СЕК</b> • автовидалення о {expire_hm}"
 
 
 def _countdown_line(expire_at: float) -> str:
     """Динамічний рядок відліку залишкового часу."""
     remaining = int(expire_at - time.time())
     if remaining <= 0:
-        return "⏳ <b>Список більше не активний</b>"
-    mins, secs = divmod(remaining, 60)
-    expire_hm = time.strftime("%H:%M", time.localtime(expire_at))
+        return "🔴 <b>ОРДЕР ЗАСТАРІВ</b> — не торгувати!"
+    secs = remaining % 60
+    mins = remaining // 60
+    expire_hm = time.strftime("%H:%M:%S", time.localtime(expire_at))
     if mins >= 1:
-        time_str = f"{mins} хв" + (f" {secs:02d} с" if mins < 3 else "")
+        time_str = f"{mins} хв {secs:02d} с"
     else:
-        time_str = f"{secs} с"
-    return f"⏳ <b>Список активний ще {time_str}</b> • автовидалення о {expire_hm}"
+        urgency = "⚠️" if remaining > 30 else "🔴"
+        time_str = f"{remaining} с"
+        return f"{urgency} <b>ЗАЛИШИЛОСЬ {time_str}</b> • автовидалення о {expire_hm}"
+    return f"⏳ <b>Залишилось {time_str}</b> • автовидалення о {expire_hm}"
 
 
 async def _live_countdown_and_delete(
@@ -84,15 +89,13 @@ async def _live_countdown_and_delete(
     message_id: int,
     body_text: str,
     reply_markup,
-    delay: int = 1800,
+    delay: int = _OPP_TTL_SECONDS,
 ):
     """
-    Надсилає живий відлік вгорі повідомлення (оновлення кожні 60 с),
-    потім видаляє повідомлення коли час вийде.
-    Для окремих нотифікацій (авто-скан), не для основного вікна.
+    Оновлює відлік кожні 15 с, потім видаляє повідомлення.
     """
     expire_at = time.time() + delay
-    interval = 60
+    interval = 15
 
     while True:
         await asyncio.sleep(interval)
@@ -608,6 +611,9 @@ async def _live_loop(chat_id: int, user_id: int):
             opps = await shared.arb_engine.scan(settings)
             if opps:
                 opps = await shared.arb_engine.verify_opportunities(opps, settings)
+            # Drop stale opportunities — never notify about orders older than TTL
+            now = time.time()
+            opps = [o for o in opps if o.scanned_at <= 0 or (now - o.scanned_at) <= _OPP_TTL_SECONDS]
             record_scan(opps)
             user_opportunities[user_id] = opps
 
