@@ -19,10 +19,11 @@ def _build_steps(opp: ArbitrageOpportunity, trading_mode: str, net_profit: float
     amount_uah_approx = opp.amount_usdt * opp.buy_price
 
     seller_nick = opp.buy_order.nickname if opp.buy_order else "продавець"
+    pay_via = f"через {payment}" if payment and payment != "—" else "UAH"
 
     if is_cross:
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH {payment} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH {pay_via} → {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
             f"3. Переказ {opp.network} → {sell_ex}",
             f"4. Продати @ {opp.sell_price:.2f} UAH",
@@ -31,7 +32,7 @@ def _build_steps(opp: ArbitrageOpportunity, trading_mode: str, net_profit: float
     else:
         sell_nick = opp.sell_order.nickname if opp.sell_order else "покупець"
         return "\n".join([
-            f"1. Надіслати {amount_uah_approx:,.0f} UAH {payment} → {seller_nick}",
+            f"1. Надіслати {amount_uah_approx:,.0f} UAH {pay_via} → {seller_nick}",
             f"2. Отримати {opp.amount_usdt:.0f} USDT @ {opp.buy_price:.2f}",
             f"3. Виставити на продаж → {sell_nick} @ {opp.sell_price:.2f}",
             f"4. Отримати {opp.amount_usdt * opp.sell_price:,.0f} UAH",
@@ -55,7 +56,7 @@ def format_opportunity(opp: ArbitrageOpportunity, index: int = 1, trading_mode: 
     gross_profit = opp.spread * opp.amount_usdt
 
     # Bank fee based on payment method commission + manual extra fee
-    payment = opp.payment_method
+    payment = opp.payment_method or "—"
     bank_commission_pct = BANK_COMMISSIONS.get(payment, 0.0)
     amount_uah_approx = opp.amount_usdt * opp.buy_price
     bank_fee_uah = amount_uah_approx * bank_commission_pct / 100 + extra_bank_fee_uah
