@@ -89,6 +89,7 @@ class ArbitrageOpportunity:
     fees_breakdown: dict
     volatility_ok: bool = True
     network: str = "TRC20"
+    scanned_at: float = 0.0
     verified: bool = False
     verified_at: float = 0.0
     verified_buy_price: float = 0.0
