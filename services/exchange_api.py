@@ -1,11 +1,28 @@
 import asyncio
 import aiohttp
 import logging
+import os
 import time
 from typing import Optional
 from models.types import P2POrder, SpotPrice
 
 logger = logging.getLogger(__name__)
+
+# Exchanges that block datacenter/cloud IPs — route through proxy when PROXY_URL is set
+_BLOCKED_EXCHANGE_DOMAINS = {
+    "mexc.com", "otc.mexc.com",
+    "gate.io", "gateio.ws",
+    "htx.com",
+    "bitget.com",
+    "kucoin.com",
+}
+
+def _needs_proxy(url: str) -> bool:
+    """Return True if this URL belongs to an exchange that blocks cloud IPs."""
+    proxy_url = os.getenv("PROXY_URL", "").strip()
+    if not proxy_url:
+        return False
+    return any(domain in url for domain in _BLOCKED_EXCHANGE_DOMAINS)
 
 CACHE = {}
 CACHE_TTL = 8
@@ -163,8 +180,11 @@ class ExchangeAPI:
     async def _get(self, url: str, params: dict = None, headers: dict = None, retries: int = 0):
         session = await self._get_session()
         h = {**_BROWSER_HEADERS, **(headers or {})}
+        proxy = os.getenv("PROXY_URL", "").strip() if _needs_proxy(url) else None
+        if proxy:
+            logger.debug(f"Using proxy for {url}")
         try:
-            async with session.get(url, params=params, headers=h) as resp:
+            async with session.get(url, params=params, headers=h, proxy=proxy or None) as resp:
                 if resp.status == 200:
                     return await resp.json(content_type=None)
                 logger.warning(f"HTTP {resp.status} for {url}")
@@ -177,8 +197,11 @@ class ExchangeAPI:
     async def _post(self, url: str, json_data: dict = None, headers: dict = None, retries: int = 0):
         session = await self._get_session()
         h = {**_BROWSER_HEADERS, "Content-Type": "application/json", **(headers or {})}
+        proxy = os.getenv("PROXY_URL", "").strip() if _needs_proxy(url) else None
+        if proxy:
+            logger.debug(f"Using proxy for POST {url}")
         try:
-            async with session.post(url, json=json_data, headers=h) as resp:
+            async with session.post(url, json=json_data, headers=h, proxy=proxy or None) as resp:
                 if resp.status == 200:
                     return await resp.json(content_type=None)
                 logger.warning(f"POST HTTP {resp.status} for {url}")
