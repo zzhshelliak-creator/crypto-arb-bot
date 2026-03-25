@@ -13,7 +13,7 @@ from handlers.keyboards import (
     main_menu_kb, main_text, scan_kb, retry_kb, live_kb, autoscan_status_kb,
     opportunity_kb, opportunities_list_kb,
     settings_kb, risk_level_kb, network_kb, banks_kb, exchanges_kb, participants_kb,
-    amount_kb, trading_mode_kb, presets_kb, cancel_input_kb, antiscam_kb,
+    amount_kb, trading_mode_kb, presets_kb, cancel_input_kb, antiscam_kb, arb_types_kb,
 )
 from models.types import UserSettings
 from utils.formatters import (
@@ -35,6 +35,7 @@ user_opportunities: dict[int, list] = {}
 user_live_tasks: dict[int, asyncio.Task] = {}
 user_temp_banks: dict[int, list] = {}
 user_temp_exchanges: dict[int, list] = {}
+user_temp_arb_types: dict[int, list] = {}
 
 
 def _save_settings():
@@ -1063,6 +1064,71 @@ async def cb_exchanges_save(call: CallbackQuery):
 
 ALL_EXCHANGES = ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"]
 ALL_BANKS = ["PrivatBank", "Monobank", "PUMB", "A-Bank", "Oschadbank", "Raiffeisen"]
+ALL_ARB_TYPES = ["p2p_same", "cross_exchange", "triangular"]
+ARB_TYPE_NAMES = {
+    "p2p_same": "P2P › P2P (одна біржа)",
+    "cross_exchange": "P2P крос-біржа",
+    "triangular": "Triangular (Spot)",
+}
+
+
+@router.callback_query(F.data == "set_arb_types")
+async def cb_set_arb_types(call: CallbackQuery):
+    settings = get_settings(call.from_user.id)
+    user_temp_arb_types[call.from_user.id] = list(getattr(settings, "arb_types", ALL_ARB_TYPES))
+    await call.message.edit_text(
+        "🔀 <b>Типи арбітражу</b>\n\n"
+        "Вибери які типи арбітражу шукати:\n\n"
+        "• <b>P2P › P2P</b> — купуєш/продаєш на одній біржі\n"
+        "• <b>P2P крос-біржа</b> — купуєш на одній, продаєш на іншій\n"
+        "• <b>Triangular</b> — через спот-маркет між двома біржами\n\n"
+        "⚠️ Потрібен хоча б один тип.",
+        reply_markup=arb_types_kb(user_temp_arb_types[call.from_user.id]),
+        parse_mode="HTML",
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("arb_toggle_"))
+async def cb_arb_type_toggle(call: CallbackQuery):
+    key = call.data.split("arb_toggle_")[1]
+    uid = call.from_user.id
+    if uid not in user_temp_arb_types:
+        user_temp_arb_types[uid] = list(getattr(get_settings(uid), "arb_types", ALL_ARB_TYPES))
+    current = user_temp_arb_types[uid]
+    if key in current:
+        if len(current) <= 1:
+            await call.answer("⚠️ Потрібен хоча б один тип!", show_alert=True)
+            return
+        current.remove(key)
+    else:
+        current.append(key)
+    await call.message.edit_reply_markup(reply_markup=arb_types_kb(current))
+    await call.answer()
+
+
+@router.callback_query(F.data == "arb_types_select_all")
+async def cb_arb_types_select_all(call: CallbackQuery):
+    uid = call.from_user.id
+    user_temp_arb_types[uid] = list(ALL_ARB_TYPES)
+    await call.message.edit_reply_markup(reply_markup=arb_types_kb(user_temp_arb_types[uid]))
+    await call.answer()
+
+
+@router.callback_query(F.data == "arb_types_save")
+async def cb_arb_types_save(call: CallbackQuery):
+    uid = call.from_user.id
+    settings = get_settings(uid)
+    saved = user_temp_arb_types.get(uid, ALL_ARB_TYPES)
+    settings.arb_types = saved
+    _save_settings()
+    names = ", ".join(ARB_TYPE_NAMES.get(k, k) for k in saved)
+    await call.message.edit_text(
+        f"✅ <b>Типи арбітражу збережено:</b>\n{names}",
+        reply_markup=settings_kb(settings),
+        parse_mode="HTML",
+    )
+    await call.answer("Збережено!")
 
 
 @router.callback_query(F.data == "select_all")
@@ -1074,13 +1140,14 @@ async def cb_select_all(call: CallbackQuery):
     settings.banks = list(ALL_BANKS)
     settings.network = "ALL"
     settings.risk_level = "HIGH"
+    settings.arb_types = list(ALL_ARB_TYPES)
     _save_settings()
     await call.message.edit_text(
         format_settings(settings),
         reply_markup=settings_kb(settings),
         parse_mode="HTML",
     )
-    await call.answer("🌟 Увімкнено: всі 8 бірж, 6 банків, всі мережі!", show_alert=True)
+    await call.answer("🌟 Увімкнено: всі 8 бірж, 6 банків, всі мережі, всі типи арбітражу!", show_alert=True)
 
 
 @router.callback_query(F.data == "banks_select_all")
