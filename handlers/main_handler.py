@@ -443,7 +443,7 @@ async def cb_opp_detail(call: CallbackQuery):
         return
     opp = opps[index]
     s = get_settings(call.from_user.id)
-    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0))
+    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), user_banks=s.banks)
     await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
     await call.answer()
 
@@ -457,7 +457,7 @@ async def cb_opp_next(call: CallbackQuery):
         return
     opp = opps[index]
     s = get_settings(call.from_user.id)
-    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0))
+    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), user_banks=s.banks)
     await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
     await call.answer()
 
@@ -474,7 +474,7 @@ async def cb_opp_prev(call: CallbackQuery):
         return
     opp = opps[index]
     s = get_settings(call.from_user.id)
-    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0))
+    text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), user_banks=s.banks)
     try:
         await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
     except TelegramBadRequest:
@@ -624,7 +624,7 @@ async def _live_loop(chat_id: int, user_id: int):
                 alert_body = (
                     f"🔔 <b>Авто-Скан: нова можливість!</b>\n"
                     f"скан #{scan_count} • запущено {elapsed} тому\n\n"
-                    + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
+                    + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0), user_banks=settings.banks)
                     + f"\n\n🔍 Всього знайдено в цьому скані: {len(opps)}"
                     + "\n—\n" + scan_report
                 )
@@ -645,7 +645,7 @@ async def _live_loop(chat_id: int, user_id: int):
                     try:
                         p_body = (
                             f"🔔 <b>Live Alert від власника!</b>\n\n"
-                            + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
+                            + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0), user_banks=settings.banks)
                             + f"\n\n🔍 Всього знайдено: {len(opps)}"
                         )
                         p_text = _expire_header() + "\n—\n" + p_body
