@@ -355,9 +355,9 @@ class ArbitrageEngine:
                         risk=RiskLevel.LOW,
                         score=0,
                         trade_steps=[
-                            f"1. Надіслати {settings.amount_uah:,.0f} UAH через {common_methods[0].title()} → {buy.nickname}",
+                            f"1. Надіслати {settings.amount_uah:,.0f} UAH через {common_methods[0].title()} › {buy.nickname}",
                             f"2. Отримати {calc['usdt_bought']:.2f} USDT @ {buy.price:.2f} грн (avg release ~{release_min} хв)",
-                            f"3. Виставити USDT на продаж → {sell.nickname} @ {sell.price:.2f} грн",
+                            f"3. Виставити USDT на продаж › {sell.nickname} @ {sell.price:.2f} грн",
                             f"4. Отримати {calc['uah_received']:,.0f} UAH на {common_methods[0].title()}",
                             f"5. Профіт: +{calc['profit_uah']:,.0f} UAH ({calc['profit_pct']:.2f}%) | Комісії: 0 UAH",
                         ],
@@ -471,7 +471,7 @@ class ArbitrageEngine:
                             trade_steps=[
                                 f"1. Купити {calc['usdt_bought']:.2f} USDT на {buy.exchange} @ {buy.price:.2f} грн",
                                 f"   └─ Продавець: {buy.nickname} | Час: ~{release_min} хв",
-                                f"2. Вивести {calc['usdt_bought']:.2f} USDT → {sell.exchange} через {resolved_net}",
+                                f"2. Вивести {calc['usdt_bought']:.2f} USDT › {sell.exchange} через {resolved_net}",
                                 f"   └─ Комісія мережі: {withdrawal_fee_usdt:.2f} USDT ≈ {withdrawal_fee_uah:.0f} грн",
                                 f"3. Продати {calc['usdt_after_fees']:.2f} USDT на {sell.exchange} @ {sell.price:.2f} грн",
                                 f"4. Отримати {calc['uah_received']:,.0f} UAH",
