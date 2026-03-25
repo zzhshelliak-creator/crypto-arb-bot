@@ -57,6 +57,40 @@ async def _schedule_delete(chat_id: int, message_id: int, delay: int = 1800):
 
 user_temp_trading_mode: dict[int, str] = {}
 
+# ─── Single-window tracking ────────────────────────────────────────────────
+# Only ONE bot message per user is the "dialog window" (pinned at top).
+# Every menu navigation edits this message in-place.
+user_main_msg: dict[int, int] = {}   # user_id -> message_id of pinned dialog window
+
+
+async def _set_main_msg(bot, chat_id: int, user_id: int, message_id: int) -> None:
+    """Pin the new main message and delete the old one. Silent on errors."""
+    old_id = user_main_msg.get(user_id)
+    user_main_msg[user_id] = message_id
+    if old_id and old_id != message_id:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=old_id)
+        except Exception:
+            pass
+    try:
+        await bot.pin_chat_message(
+            chat_id=chat_id, message_id=message_id, disable_notification=True
+        )
+    except Exception:
+        pass
+
+
+async def _try_delete(bot_or_msg, chat_id: int = None, message_id: int = None):
+    """Silently delete a message."""
+    try:
+        if chat_id and message_id:
+            await bot_or_msg.delete_message(chat_id=chat_id, message_id=message_id)
+        else:
+            await bot_or_msg.delete()
+    except Exception:
+        pass
+
+
 # Auto-scan tracking
 user_autoscan_status_msg: dict[int, int] = {}   # user_id -> message_id of status msg
 user_autoscan_scan_count: dict[int, int] = {}   # user_id -> total scans done
@@ -91,8 +125,10 @@ def get_settings(user_id: int) -> UserSettings:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    settings = get_settings(message.from_user.id)
-    await message.answer(
+    uid = message.from_user.id
+    settings = get_settings(uid)
+    await _try_delete(message)   # delete user's /start message
+    sent = await message.answer(
         "👋 <b>Crypto Arbitrage Bot</b>\n\n"
         "Знаходжу реальні арбітражні можливості на P2P та Spot ринках.\n"
         "Тільки реальні угоди після всіх комісій.\n\n"
@@ -100,12 +136,26 @@ async def cmd_start(message: Message):
         reply_markup=main_menu_kb(),
         parse_mode="HTML",
     )
+    await _set_main_msg(message.bot, message.chat.id, uid, sent.message_id)
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message):
-    settings = get_settings(message.from_user.id)
-    await message.answer(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    uid = message.from_user.id
+    settings = get_settings(uid)
+    await _try_delete(message)   # delete user's /menu message
+    main_id = user_main_msg.get(uid)
+    if main_id:
+        try:
+            await message.bot.edit_message_text(
+                chat_id=message.chat.id, message_id=main_id,
+                text=main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML",
+            )
+            return
+        except TelegramBadRequest:
+            pass
+    sent = await message.answer(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await _set_main_msg(message.bot, message.chat.id, uid, sent.message_id)
 
 
 @router.message(Command("help"))
@@ -164,7 +214,10 @@ async def cmd_help(message: Message):
 @router.callback_query(F.data == "back_main")
 async def cb_back_main(call: CallbackQuery, state: FSMContext):
     await state.clear()
-    settings = get_settings(call.from_user.id)
+    uid = call.from_user.id
+    # Sync main message tracking (restores after bot restart)
+    user_main_msg[uid] = call.message.message_id
+    settings = get_settings(uid)
     try:
         await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     except TelegramBadRequest:
@@ -600,17 +653,22 @@ async def cb_amount_custom(call: CallbackQuery, state: FSMContext):
 
 async def _edit_or_answer(message: Message, bot_msg_id: int | None, chat_id: int | None,
                           text: str, reply_markup=None, parse_mode="HTML"):
-    """Редагує попереднє бот-повідомлення або відправляє нове."""
-    if bot_msg_id and chat_id:
+    """Редагує попереднє бот-повідомлення або відправляє нове і пінить його."""
+    uid = message.from_user.id
+    effective_id = bot_msg_id or user_main_msg.get(uid)
+    effective_chat = chat_id or message.chat.id
+    if effective_id and effective_chat:
         try:
             await message.bot.edit_message_text(
-                chat_id=chat_id, message_id=bot_msg_id,
+                chat_id=effective_chat, message_id=effective_id,
                 text=text, reply_markup=reply_markup, parse_mode=parse_mode,
             )
             return
         except TelegramBadRequest:
             pass
-    await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    # Fallback: send new message and make it the new main window
+    sent = await message.answer(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    await _set_main_msg(message.bot, message.chat.id, uid, sent.message_id)
 
 
 @router.message(SetAmount.waiting_for_amount)
@@ -1105,27 +1163,32 @@ async def cb_set_interval(call: CallbackQuery, state: FSMContext):
         parse_mode="HTML",
     )
     await state.set_state(SetFilters.waiting_for_interval)
+    await state.update_data(bot_msg_id=call.message.message_id, chat_id=call.message.chat.id)
     await call.answer()
 
 
 @router.message(SetFilters.waiting_for_interval)
 async def process_interval(message: Message, state: FSMContext):
+    data = await state.get_data()
+    bot_msg_id = data.get("bot_msg_id")
+    chat_id = data.get("chat_id")
+    await _try_delete(message)
     try:
         val = int(message.text.strip())
         if val < 10 or val > 300:
-            await message.answer("❌ Інтервал від 10 до 300 секунд")
+            await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Інтервал від 10 до 300 секунд")
             return
         settings = get_settings(message.from_user.id)
         settings.scan_interval = val
         _save_settings()
         await state.clear()
-        await message.answer(
+        await _edit_or_answer(
+            message, bot_msg_id, chat_id,
             f"✅ Інтервал авто-скану: <b>{val} сек</b>",
             reply_markup=settings_kb(settings),
-            parse_mode="HTML",
         )
     except ValueError:
-        await message.answer("❌ Введіть ціле число")
+        await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Введіть ціле число")
 
 
 @router.callback_query(F.data == "menu_favorites")
@@ -1186,45 +1249,49 @@ async def cb_part_add(call: CallbackQuery, state: FSMContext):
         disable_web_page_preview=True,
     )
     await state.set_state(AddParticipant.waiting_for_user_id)
+    await state.update_data(bot_msg_id=call.message.message_id, chat_id=call.message.chat.id)
     await call.answer()
 
 
 @router.message(AddParticipant.waiting_for_user_id)
 async def process_add_participant(message: Message, state: FSMContext):
+    data = await state.get_data()
+    bot_msg_id = data.get("bot_msg_id")
+    chat_id = data.get("chat_id")
+    await _try_delete(message)
     text = message.text.strip() if message.text else ""
     try:
         participant_id = int(text)
     except ValueError:
-        await message.answer(
+        await _edit_or_answer(
+            message, bot_msg_id, chat_id,
             "❌ Невірний формат. Введіть числовий Telegram ID, наприклад:\n<code>123456789</code>",
-            parse_mode="HTML",
         )
         return
 
     if participant_id == message.from_user.id:
-        await message.answer("❌ Не можна додати себе як учасника.")
+        await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Не можна додати себе як учасника.")
         return
 
     name = f"User {participant_id}"
     added = add_participant(message.from_user.id, participant_id, name)
     await state.clear()
+    parts = get_participants(message.from_user.id)
 
     if added:
-        parts = get_participants(message.from_user.id)
-        await message.answer(
+        await _edit_or_answer(
+            message, bot_msg_id, chat_id,
             f"✅ <b>Учасника додано!</b>\n\n"
             f"👤 ID: <code>{participant_id}</code>\n\n"
             f"Тепер він отримуватиме Live Mode сповіщення.\n"
             f"Загалом учасників: <b>{len(parts)}</b>",
             reply_markup=participants_kb(parts),
-            parse_mode="HTML",
         )
     else:
-        parts = get_participants(message.from_user.id)
-        await message.answer(
+        await _edit_or_answer(
+            message, bot_msg_id, chat_id,
             f"⚠️ Учасник <code>{participant_id}</code> вже є у списку.",
             reply_markup=participants_kb(parts),
-            parse_mode="HTML",
         )
 
 
