@@ -55,6 +55,68 @@ async def _schedule_delete(chat_id: int, message_id: int, delay: int = 1800):
         pass
 
 
+def _expire_header(delay: int = 1800) -> str:
+    """Статичний рядок-шапка з часом закінчення (для основного вікна)."""
+    expire_at = time.time() + delay
+    expire_hm = time.strftime("%H:%M", time.localtime(expire_at))
+    mins = delay // 60
+    return f"⏳ <b>Список активний ще {mins} хв</b> • автовидалення о {expire_hm}"
+
+
+def _countdown_line(expire_at: float) -> str:
+    """Динамічний рядок відліку залишкового часу."""
+    remaining = int(expire_at - time.time())
+    if remaining <= 0:
+        return "⏳ <b>Список більше не активний</b>"
+    mins, secs = divmod(remaining, 60)
+    expire_hm = time.strftime("%H:%M", time.localtime(expire_at))
+    if mins >= 1:
+        time_str = f"{mins} хв" + (f" {secs:02d} с" if mins < 3 else "")
+    else:
+        time_str = f"{secs} с"
+    return f"⏳ <b>Список активний ще {time_str}</b> • автовидалення о {expire_hm}"
+
+
+async def _live_countdown_and_delete(
+    chat_id: int,
+    message_id: int,
+    body_text: str,
+    reply_markup,
+    delay: int = 1800,
+):
+    """
+    Надсилає живий відлік вгорі повідомлення (оновлення кожні 60 с),
+    потім видаляє повідомлення коли час вийде.
+    Для окремих нотифікацій (авто-скан), не для основного вікна.
+    """
+    expire_at = time.time() + delay
+    interval = 60
+
+    while True:
+        await asyncio.sleep(interval)
+        remaining = expire_at - time.time()
+        if remaining <= 5:
+            break
+        header = _countdown_line(expire_at)
+        new_text = header + "\n\n" + body_text
+        try:
+            await shared.bot_instance.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=new_text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception:
+            pass  # Message already deleted / edited by user navigation
+
+    try:
+        await shared.bot_instance.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
+
+
 user_temp_trading_mode: dict[int, str] = {}
 
 # ─── Single-window tracking ────────────────────────────────────────────────
@@ -333,8 +395,8 @@ async def cb_scan_start(call: CallbackQuery):
         else:
             uid = call.from_user.id
             is_autoscan = uid in user_live_tasks and not user_live_tasks[uid].done()
-            text = format_opportunities_list(opportunities)
-            text += "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
+            body = format_opportunities_list(opportunities)
+            text = _expire_header() + "\n\n" + body
             await call.message.edit_text(
                 text,
                 reply_markup=opportunities_list_kb(opportunities, autoscan_running=is_autoscan),
@@ -556,30 +618,33 @@ async def _live_loop(chat_id: int, user_id: int):
 
                 top = opps[0]
                 elapsed = _fmt_duration(time.time() - user_autoscan_start_time.get(user_id, time.time()))
-                alert_text = (
+                alert_body = (
                     f"🔔 <b>Авто-Скан: нова можливість!</b>\n"
                     f"скан #{scan_count} • запущено {elapsed} тому\n\n"
                     + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                     + f"\n\n🔍 Всього знайдено в цьому скані: {len(opps)}"
-                    + "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
                 )
+                alert_kb = opportunities_list_kb(opps, autoscan_running=True)
+                alert_text = _expire_header() + "\n\n" + alert_body
                 sent = await shared.bot_instance.send_message(
                     chat_id, alert_text,
                     parse_mode="HTML",
-                    reply_markup=opportunities_list_kb(opps, autoscan_running=True),
+                    reply_markup=alert_kb,
                 )
-                asyncio.create_task(_schedule_delete(chat_id, sent.message_id))
+                asyncio.create_task(
+                    _live_countdown_and_delete(chat_id, sent.message_id, alert_body, alert_kb)
+                )
 
                 # Notify participants
                 participants = get_participants(user_id)
                 for p in participants:
                     try:
-                        p_text = (
+                        p_body = (
                             f"🔔 <b>Live Alert від власника!</b>\n\n"
                             + format_opportunity(top, 1, settings.trading_mode, getattr(settings, "bank_fee_uah", 0.0))
                             + f"\n\n🔍 Всього знайдено: {len(opps)}"
-                            + "\n\n<i>🕐 Це повідомлення видалиться автоматично через 30 хвилин</i>"
                         )
+                        p_text = _expire_header() + "\n\n" + p_body
                         p_sent = await shared.bot_instance.send_message(
                             p["user_id"], p_text,
                             parse_mode="HTML",
