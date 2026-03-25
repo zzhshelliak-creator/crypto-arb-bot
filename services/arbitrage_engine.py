@@ -311,10 +311,15 @@ class ArbitrageEngine:
                         logger.debug(f"[{exchange}] SELL {sell.nickname} rejected: {reason}")
                         continue
 
-                    # Same-exchange P2P requires a shared bank (filtered by user settings)
-                    common_methods = find_common_payment_methods(buy, sell, settings.banks)
-                    if not common_methods:
-                        logger.debug(f"[{exchange}] No common payment methods between {buy.nickname} and {sell.nickname}")
+                    # Buy side: seller must accept user's buy bank
+                    buy_method = _pick_payment_method(buy, settings.buy_banks)
+                    if not buy_method:
+                        logger.debug(f"[{exchange}] BUY {buy.nickname} doesn't accept user buy_banks")
+                        continue
+                    # Sell side: buyer must pay via user's sell bank
+                    sell_method = _pick_payment_method(sell, settings.sell_banks)
+                    if not sell_method:
+                        logger.debug(f"[{exchange}] SELL {sell.nickname} doesn't pay via user sell_banks")
                         continue
 
                     # Sell price must beat buy price
@@ -351,7 +356,8 @@ class ArbitrageEngine:
                         amount_usdt=calc["usdt_bought"],
                         buy_order=buy,
                         sell_order=sell,
-                        payment_method=common_methods[0],
+                        payment_method=buy_method,
+                        sell_payment_method=sell_method,
                         execution_ease="",
                         speed=speed,
                         liquidity_ok=True,
@@ -360,10 +366,10 @@ class ArbitrageEngine:
                         risk=RiskLevel.LOW,
                         score=0,
                         trade_steps=[
-                            f"1. Надіслати {settings.amount_uah:,.0f} UAH через {common_methods[0].title()} › {buy.nickname}",
+                            f"1. Надіслати {settings.amount_uah:,.0f} UAH через {buy_method} › {buy.nickname}",
                             f"2. Отримати {calc['usdt_bought']:.2f} USDT @ {buy.price:.2f} грн (avg release ~{release_min} хв)",
                             f"3. Виставити USDT на продаж › {sell.nickname} @ {sell.price:.2f} грн",
-                            f"4. Отримати {calc['uah_received']:,.0f} UAH на {common_methods[0].title()}",
+                            f"4. Отримати {calc['uah_received']:,.0f} UAH на {sell_method}",
                             f"5. Профіт: +{calc['profit_uah']:,.0f} UAH ({calc['profit_pct']:.2f}%) | Комісії: 0 UAH",
                         ],
                         fees_breakdown={
@@ -466,7 +472,8 @@ class ArbitrageEngine:
                             amount_usdt=calc["usdt_bought"],
                             buy_order=buy,
                             sell_order=sell,
-                            payment_method=_pick_payment_method(buy, settings.banks),
+                            payment_method=_pick_payment_method(buy, settings.buy_banks),
+                            sell_payment_method=_pick_payment_method(sell, settings.sell_banks),
                             execution_ease="",
                             speed=speed,
                             liquidity_ok=True,
@@ -690,8 +697,9 @@ class ArbitrageEngine:
                         continue
                     if sell.price <= buy.price:
                         continue
-                    common = find_common_payment_methods(buy, sell, settings.banks or None)
-                    if not common:
+                    b_method = _pick_payment_method(buy, settings.buy_banks or None)
+                    s_method = _pick_payment_method(sell, settings.sell_banks or None)
+                    if not b_method or not s_method:
                         continue
                     calc = self._compute_p2p_profit(buy, sell, settings.amount_uah, settings.network, False)
                     profit = calc["profit_uah"]
@@ -740,8 +748,8 @@ class ArbitrageEngine:
         need_p2p = bool(arb_types & {"p2p_same", "cross_exchange"})
         need_tri = "triangular" in arb_types
 
-        buy_task = self.api.fetch_all_p2p("BUY", settings.amount_uah, settings.exchanges, settings.banks) if need_p2p else asyncio.sleep(0)
-        sell_task = self.api.fetch_all_p2p("SELL", settings.amount_uah, settings.exchanges, settings.banks) if need_p2p else asyncio.sleep(0)
+        buy_task = self.api.fetch_all_p2p("BUY", settings.amount_uah, settings.exchanges, settings.buy_banks) if need_p2p else asyncio.sleep(0)
+        sell_task = self.api.fetch_all_p2p("SELL", settings.amount_uah, settings.exchanges, settings.sell_banks) if need_p2p else asyncio.sleep(0)
         triangular_task = self.find_triangular(settings) if need_tri else asyncio.sleep(0)
 
         buy_orders_raw, sell_orders_raw, tri_opps_raw = await asyncio.gather(
@@ -870,11 +878,11 @@ class ArbitrageEngine:
             buy2, sell2 = await asyncio.gather(
                 self.api.fetch_all_p2p(
                     "BUY", settings.amount_uah,
-                    list(exchanges_needed), settings.banks
+                    list(exchanges_needed), settings.buy_banks
                 ),
                 self.api.fetch_all_p2p(
                     "SELL", settings.amount_uah,
-                    list(exchanges_needed), settings.banks
+                    list(exchanges_needed), settings.sell_banks
                 ),
             )
         except Exception as e:
