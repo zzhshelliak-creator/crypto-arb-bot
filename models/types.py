@@ -116,3 +116,4 @@ class UserSettings:
     trading_mode: str = "direct"
     min_completion_rate: float = 90.0
     bank_fee_uah: float = 0.0
+    arb_types: list[str] = field(default_factory=lambda: ["p2p_same", "cross_exchange", "triangular"])
