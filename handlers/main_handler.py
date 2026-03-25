@@ -132,8 +132,19 @@ user_main_msg: dict[int, int] = {}   # user_id -> message_id of pinned dialog wi
 
 async def _set_main_msg(bot, chat_id: int, user_id: int, message_id: int) -> None:
     """Pin the new main message and delete the old one. Silent on errors."""
+    # Read old ID from in-memory first, then fall back to persisted settings
     old_id = user_main_msg.get(user_id)
+    if not old_id:
+        settings = get_settings(user_id)
+        old_id = settings.main_msg_id
+
     user_main_msg[user_id] = message_id
+
+    # Persist to settings so it survives Railway redeploys
+    settings = get_settings(user_id)
+    settings.main_msg_id = message_id
+    _save_settings()
+
     if old_id and old_id != message_id:
         try:
             await bot.delete_message(chat_id=chat_id, message_id=old_id)
