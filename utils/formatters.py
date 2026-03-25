@@ -242,7 +242,7 @@ def format_opportunities_list(opps: list[ArbitrageOpportunity]) -> str:
         arb_type = opp.arb_type.value if hasattr(opp.arb_type, "value") else str(opp.arb_type)
         ex_info = (
             opp.buy_exchange if opp.buy_exchange == opp.sell_exchange
-            else f"{opp.buy_exchange}→{opp.sell_exchange}"
+            else f"{opp.buy_exchange} › {opp.sell_exchange}"
         )
         lines.append(
             f"{i}. {risk_e} <b>{arb_type}</b> | {ex_info}\n"
@@ -296,7 +296,7 @@ def format_scan_report(stats: dict) -> str:
 
     # ── Фільтрація ордерів ──────────────────────────────────────
     lines.append(
-        f"├ Ордерів: {total_raw} → анти-скам: {trusted_buys} buy / {trusted_sells} sell"
+        f"├ Ордерів: {total_raw} › анти-скам: {trusted_buys} buy / {trusted_sells} sell"
     )
 
     # ── Знайдені пари ───────────────────────────────────────────
@@ -372,7 +372,7 @@ def format_favorites(favorites: list) -> str:
     for i, f in enumerate(favorites[:10], 1):
         risk_e = {"LOW": "🟢", "MEDIUM": "🟡", "HIGH": "🔴"}.get(f.get("risk", ""), "⚪")
         lines.append(
-            f"{i}. {risk_e} {f.get('type', '?')} | {f.get('buy_exchange', '?')}→{f.get('sell_exchange', '?')}\n"
+            f"{i}. {risk_e} {f.get('type', '?')} | {f.get('buy_exchange', '?')} › {f.get('sell_exchange', '?')}\n"
             f"   💰 +{f.get('profit_uah', 0):.0f} грн | {f.get('saved_at', '')[:16]}"
         )
     return "\n".join(lines)
