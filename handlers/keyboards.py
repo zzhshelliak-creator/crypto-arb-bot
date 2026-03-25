@@ -23,13 +23,14 @@ def main_menu_kb() -> InlineKeyboardMarkup:
 def main_text(settings=None) -> str:
     if settings is None:
         return "📌 <b>Головне меню</b>\n\nВибери дію:"
-    banks = ", ".join(settings.banks[:3]) + ("…" if len(settings.banks) > 3 else "")
+    buy_b = ", ".join(settings.buy_banks[:2]) + ("…" if len(settings.buy_banks) > 2 else "")
+    sell_b = ", ".join(settings.sell_banks[:2]) + ("…" if len(settings.sell_banks) > 2 else "")
     exchanges = ", ".join(settings.exchanges[:4]) + ("…" if len(settings.exchanges) > 4 else "")
     mode = "Напряму" if settings.trading_mode == "direct" else "Як 3 особа"
     return (
         "📌 <b>Головне меню</b>\n\n"
         f"💰 <b>{settings.amount_uah:,.0f} грн</b>  ·  📈 мін. <b>{settings.min_profit_uah:,.0f} грн</b>  ·  ⚠️ {settings.risk_level}\n"
-        f"🏦 {banks}\n"
+        f"🏦 Купівля: {buy_b}  ·  Продаж: {sell_b}\n"
         f"📡 {exchanges}  ·  🌐 {settings.network}  ·  🤝 {mode}\n\n"
         "Натисни 🔍 <b>Сканувати зараз</b> для пошуку арбітражу."
     )
@@ -209,7 +210,10 @@ def settings_kb(settings=None) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=network_label, callback_data="set_network"),
         ],
         [
-            InlineKeyboardButton(text="🏦 Банки", callback_data="set_banks"),
+            InlineKeyboardButton(text="🏦 Банк купівлі", callback_data="set_buy_banks"),
+            InlineKeyboardButton(text="🏦 Банк продажу", callback_data="set_sell_banks"),
+        ],
+        [
             InlineKeyboardButton(text="📡 Біржі", callback_data="set_exchanges"),
         ],
         [
@@ -285,23 +289,27 @@ def arb_types_kb(selected: list[str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def banks_kb(selected: list[str]) -> InlineKeyboardMarkup:
+def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
+    """
+    side: "buy" або "sell"
+    Callback-prefixes: {side}_bank_toggle_*, {side}_banks_select_all, {side}_banks_save
+    """
     all_banks = ["PrivatBank", "Monobank", "PUMB", "A-Bank", "Oschadbank", "Raiffeisen"]
-    all_selected = len(selected) == len(all_banks)
+    all_selected = set(selected) >= set(all_banks)
     buttons = []
     row = []
     for bank in all_banks:
         check = "✅" if bank in selected else "☐"
-        row.append(InlineKeyboardButton(text=f"{check} {bank}", callback_data=f"bank_toggle_{bank}"))
+        row.append(InlineKeyboardButton(text=f"{check} {bank}", callback_data=f"{side}_bank_toggle_{bank}"))
         if len(row) == 2:
             buttons.append(row)
             row = []
     if row:
         buttons.append(row)
     all_label = "✅ Всі банки вибрано" if all_selected else "🌟 Вибрати всі банки"
-    buttons.append([InlineKeyboardButton(text=all_label, callback_data="banks_select_all")])
+    buttons.append([InlineKeyboardButton(text=all_label, callback_data=f"{side}_banks_select_all")])
     buttons.append([
-        InlineKeyboardButton(text="✔️ Зберегти", callback_data="banks_save"),
+        InlineKeyboardButton(text="✔️ Зберегти", callback_data=f"{side}_banks_save"),
         InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
