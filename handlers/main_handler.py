@@ -315,6 +315,8 @@ async def cb_scan_start(call: CallbackQuery):
                 parse_mode="HTML",
             )
             opportunities = await shared.arb_engine.verify_opportunities(opportunities, settings)
+            # Відкидаємо можливості, що не пройшли перевірку — ціна вже змінилась
+            opportunities = [o for o in opportunities if o.verified]
         record_scan(opportunities)
         user_opportunities[call.from_user.id] = opportunities
 
@@ -611,6 +613,8 @@ async def _live_loop(chat_id: int, user_id: int):
             opps = await shared.arb_engine.scan(settings)
             if opps:
                 opps = await shared.arb_engine.verify_opportunities(opps, settings)
+                # Відкидаємо можливості що не пройшли перевірку — ціна вже змінилась на момент повтор.запиту
+                opps = [o for o in opps if o.verified]
             # Drop stale opportunities — never notify about orders older than TTL
             now = time.time()
             opps = [o for o in opps if o.scanned_at <= 0 or (now - o.scanned_at) <= _OPP_TTL_SECONDS]
