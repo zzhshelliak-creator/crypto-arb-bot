@@ -145,12 +145,17 @@ _BANK_NORMALIZE: dict[str, str | None] = {
     "RaiffeisenBankAval":     "Raiffeisen",
     "Raiffaizen":             "Raiffeisen",
     "SenseSuperApp":          "Sense SuperApp",
-    "BankVlasnyiRakhunok":    "Банківський рахунок",
-    "Bank Vlasnyi Rakhunok":  "Банківський рахунок",
-    "Bank Transfer":          None,
+    "BankVlasnyiRakhunok":    None,   # банківський рахунок — generic
+    "Bank Vlasnyi Rakhunok":  None,   # generic
+    "Bank Transfer":          None,   # generic — не конкретний банк
+    "bank transfer":          None,
+    "Банківський переказ":    None,   # Bybit ID=1 — generic wire transfer
+    "банківський переказ":    None,
+    "Банківський рахунок":    None,
+    "банківський рахунок":    None,
     "Monobankiban":           "Monobank",
     "alliancecard":           "Alliance Card",
-    "bank":                   None,  # занадто загальна назва — пропускаємо
+    "bank":                   None,   # занадто загальна назва — пропускаємо
     "Idea Bank":              "Idea Bank",
 }
 
