@@ -175,27 +175,37 @@ def format_opportunity(
 
     steps = _build_steps(opp, trading_mode, net_profit, net_profit_pct, payment)
 
+    # Scan age — how old is this opportunity
+    def _age_str(ts: float) -> str:
+        if ts <= 0:
+            return "невідомо"
+        age = int(time.time() - ts)
+        if age < 5:
+            return "щойно"
+        if age < 60:
+            return f"{age} сек тому"
+        return f"{age // 60} хв {age % 60} сек тому"
+
+    scan_age = _age_str(opp.scanned_at)
+
     # Verification status line
     if opp.verified and opp.verified_at > 0:
-        age_sec = int(time.time() - opp.verified_at)
-        if age_sec < 5:
-            age_str = "щойно"
-        elif age_sec < 60:
-            age_str = f"{age_sec} сек тому"
-        else:
-            age_str = f"{age_sec // 60} хв тому"
-        verify_line = f"✅ <b>Ціни підтверджено</b> ({age_str}) — реальний ринок"
+        verify_age = _age_str(opp.verified_at)
+        verify_line = f"✅ <b>Ціни підтверджено</b> ({verify_age}) — ордери актуальні"
         price_check = ""
         if opp.verified_buy_price and abs(opp.verified_buy_price - opp.buy_price) > 0.001:
-            price_check = f" (перевірено: {opp.verified_buy_price:.2f}/{opp.verified_sell_price:.2f})"
+            price_check = f"\n   └─ Ціна змінилась: {opp.verified_buy_price:.2f}/{opp.verified_sell_price:.2f} UAH"
         verify_line += price_check
     else:
-        verify_line = "⚠️ Ціни отримані з першого скану — можуть змінитись"
+        verify_line = f"⚠️ <b>Не перевірено</b> — ордери можуть бути вже зайняті!"
+
+    scan_line = f"🕐 Знайдено: {scan_age}"
 
     msg = (
         f"🔥 <b>АРБІТРАЖ #{index}</b>\n"
         f"Тип: {arb_type_str}\n"
         f"{exchange_line}\n"
+        f"{scan_line}\n"
         f"{verify_line}\n\n"
 
         f"💰 <b>Ціни:</b>\n"
