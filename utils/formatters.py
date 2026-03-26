@@ -1,8 +1,5 @@
-import os
 import time
 from models.types import ArbitrageOpportunity, ArbitrageType, RiskLevel, SpeedType
-
-_PROXY_EXCHANGES = {"MEXC", "Gate.io", "HTX", "Bitget", "KuCoin"}
 
 # Generic payment labels that are NOT specific bank names — never show these
 _GENERIC_BANK_LABELS = {
@@ -299,33 +296,24 @@ def format_scan_report(stats: dict) -> str:
     triangular = stats.get("triangular", 0)
     final = stats.get("final", 0)
     risk_level = stats.get("risk_level", "MEDIUM")
-    has_proxy = bool(os.getenv("PROXY_URL", "").strip())
 
     lines = ["📊 <b>Аналіз скану:</b>"]
 
     # ── Стан кожної біржі ──────────────────────────────────────
     ok_parts: list[str] = []
     fail_parts: list[str] = []
-    proxy_needed: list[str] = []
 
     for ex in requested:
         count = ex_counts.get(ex, 0)
         if count > 0:
             ok_parts.append(f"{ex} ({count})")
         else:
-            if ex in _PROXY_EXCHANGES and not has_proxy:
-                fail_parts.append(f"{ex}")
-                proxy_needed.append(ex)
-            else:
-                fail_parts.append(f"{ex} (0)")
+            fail_parts.append(f"{ex} (0)")
 
     if ok_parts:
         lines.append("├ ✅ " + ", ".join(ok_parts))
     if fail_parts:
-        if proxy_needed:
-            lines.append("├ ❌ " + ", ".join(fail_parts) + " — потрібен проксі")
-        else:
-            lines.append("├ ❌ " + ", ".join(fail_parts))
+        lines.append("├ ❌ " + ", ".join(fail_parts))
 
     # ── Фільтрація ордерів ──────────────────────────────────────
     lines.append(
@@ -343,13 +331,6 @@ def format_scan_report(stats: dict) -> str:
     pair_str = " + ".join(pair_parts) if pair_parts else "0 пар"
     lines.append(f"├ Пар знайдено: {pair_str}")
     lines.append(f"└ Показано топ {final}: score (спред+надійність+ліквідність), ризик ≤ {risk_level}")
-
-    # ── Підказка про проксі ─────────────────────────────────────
-    if proxy_needed:
-        lines.append("—")
-        lines.append(
-            f"<i>💡 Встанови PROXY_URL щоб розблокувати: {', '.join(proxy_needed)}</i>"
-        )
 
     return "\n".join(lines)
 
