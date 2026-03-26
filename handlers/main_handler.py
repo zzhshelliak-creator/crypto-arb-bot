@@ -12,7 +12,7 @@ from aiogram.exceptions import TelegramBadRequest
 from handlers.keyboards import (
     main_menu_kb, main_text, scan_kb, retry_kb, live_kb, autoscan_status_kb,
     opportunity_kb, opportunities_list_kb,
-    settings_kb, risk_level_kb, network_kb, banks_kb, exchanges_kb, participants_kb,
+    settings_kb, risk_level_kb, network_kb, banks_kb, banks_menu_kb, exchanges_kb, participants_kb,
     amount_kb, trading_mode_kb, presets_kb, cancel_input_kb, antiscam_kb, arb_types_kb,
 )
 from models.types import UserSettings
@@ -998,6 +998,16 @@ async def cb_network_set(call: CallbackQuery):
         parse_mode="HTML",
     )
     await call.answer(f"Мережа: {network}")
+
+
+@router.callback_query(F.data == "set_banks")
+async def cb_set_banks(call: CallbackQuery):
+    await call.message.edit_text(
+        "🏦 <b>Банк</b>\n\nОбери який банк налаштувати:",
+        reply_markup=banks_menu_kb(),
+        parse_mode="HTML",
+    )
+    await call.answer()
 
 
 @router.callback_query(F.data == "set_buy_banks")
