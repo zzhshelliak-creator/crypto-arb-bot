@@ -26,11 +26,6 @@ class ExchangeName(str, Enum):
     BINANCE = "Binance"
     BYBIT = "Bybit"
     OKX = "OKX"
-    BITGET = "Bitget"
-    MEXC = "MEXC"
-    GATE = "Gate.io"
-    HTX = "HTX"
-    KUCOIN = "KuCoin"
 
 
 @dataclass
@@ -110,7 +105,7 @@ class UserSettings:
     amount_uah: float = 20000.0
     min_profit_uah: float = 50.0
     risk_level: str = "MEDIUM"
-    exchanges: list[str] = field(default_factory=lambda: ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"])
+    exchanges: list[str] = field(default_factory=lambda: ["Binance", "Bybit", "OKX"])
     buy_banks: list[str] = field(default_factory=lambda: ["PrivatBank", "Monobank"])
     sell_banks: list[str] = field(default_factory=lambda: ["PrivatBank", "Monobank"])
     network: str = "TRC20"
