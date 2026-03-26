@@ -538,7 +538,7 @@ async def cb_opp_detail(call: CallbackQuery):
     opp = opps[index]
     s = get_settings(uid)
     text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), buy_banks=s.buy_banks, sell_banks=s.sell_banks)
-    await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
+    await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps), opp), parse_mode="HTML")
     await call.answer()
 
 
@@ -552,7 +552,7 @@ async def cb_opp_next(call: CallbackQuery):
     opp = opps[index]
     s = get_settings(call.from_user.id)
     text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), buy_banks=s.buy_banks, sell_banks=s.sell_banks)
-    await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
+    await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps), opp), parse_mode="HTML")
     await call.answer()
 
 
@@ -570,7 +570,7 @@ async def cb_opp_prev(call: CallbackQuery):
     s = get_settings(call.from_user.id)
     text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), buy_banks=s.buy_banks, sell_banks=s.sell_banks)
     try:
-        await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
+        await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps), opp), parse_mode="HTML")
     except TelegramBadRequest:
         pass
     await call.answer()
