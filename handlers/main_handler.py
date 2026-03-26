@@ -34,10 +34,6 @@ user_settings: dict[int, UserSettings] = settings_storage.load_all()
 user_opportunities: dict[int, list] = {}
 user_opps_time: dict[int, float] = {}      # timestamp when opps were found
 user_live_tasks: dict[int, asyncio.Task] = {}
-user_temp_buy_banks: dict[int, list] = {}
-user_temp_sell_banks: dict[int, list] = {}
-user_temp_exchanges: dict[int, list] = {}
-user_temp_arb_types: dict[int, list] = {}
 
 
 _OPP_TTL_SECONDS = 90       # notification TTL for autoscan alerts
@@ -1077,10 +1073,9 @@ async def cb_set_banks(call: CallbackQuery):
 @router.callback_query(F.data == "set_buy_banks")
 async def cb_set_buy_banks(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
-    user_temp_buy_banks[call.from_user.id] = list(settings.buy_banks)
     await call.message.edit_text(
         "🏦 <b>Банк КУПІВЛІ</b>\n\nЦим банком ти платиш продавцю коли купуєш USDT:",
-        reply_markup=banks_kb("buy", user_temp_buy_banks[call.from_user.id]),
+        reply_markup=banks_kb("buy", settings.buy_banks),
         parse_mode="HTML",
     )
     await call.answer()
@@ -1089,10 +1084,9 @@ async def cb_set_buy_banks(call: CallbackQuery):
 @router.callback_query(F.data == "set_sell_banks")
 async def cb_set_sell_banks(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
-    user_temp_sell_banks[call.from_user.id] = list(settings.sell_banks)
     await call.message.edit_text(
         "🏦 <b>Банк ПРОДАЖУ</b>\n\nНа цей банк покупець надсилає гроші коли ти продаєш USDT:",
-        reply_markup=banks_kb("sell", user_temp_sell_banks[call.from_user.id]),
+        reply_markup=banks_kb("sell", settings.sell_banks),
         parse_mode="HTML",
     )
     await call.answer()
@@ -1102,13 +1096,16 @@ async def cb_set_sell_banks(call: CallbackQuery):
 async def cb_buy_bank_toggle(call: CallbackQuery):
     bank = "_".join(call.data.split("_")[3:])
     uid = call.from_user.id
-    if uid not in user_temp_buy_banks:
-        user_temp_buy_banks[uid] = list(get_settings(uid).buy_banks)
-    if bank in user_temp_buy_banks[uid]:
-        user_temp_buy_banks[uid].remove(bank)
+    settings = get_settings(uid)
+    if bank in settings.buy_banks:
+        if len(settings.buy_banks) <= 1:
+            await call.answer("⚠️ Потрібен хоча б один банк!", show_alert=True)
+            return
+        settings.buy_banks.remove(bank)
     else:
-        user_temp_buy_banks[uid].append(bank)
-    await call.message.edit_reply_markup(reply_markup=banks_kb("buy", user_temp_buy_banks[uid]))
+        settings.buy_banks.append(bank)
+    _save_settings()
+    await call.message.edit_reply_markup(reply_markup=banks_kb("buy", settings.buy_banks))
     await call.answer()
 
 
@@ -1116,43 +1113,25 @@ async def cb_buy_bank_toggle(call: CallbackQuery):
 async def cb_sell_bank_toggle(call: CallbackQuery):
     bank = "_".join(call.data.split("_")[3:])
     uid = call.from_user.id
-    if uid not in user_temp_sell_banks:
-        user_temp_sell_banks[uid] = list(get_settings(uid).sell_banks)
-    if bank in user_temp_sell_banks[uid]:
-        user_temp_sell_banks[uid].remove(bank)
+    settings = get_settings(uid)
+    if bank in settings.sell_banks:
+        if len(settings.sell_banks) <= 1:
+            await call.answer("⚠️ Потрібен хоча б один банк!", show_alert=True)
+            return
+        settings.sell_banks.remove(bank)
     else:
-        user_temp_sell_banks[uid].append(bank)
-    await call.message.edit_reply_markup(reply_markup=banks_kb("sell", user_temp_sell_banks[uid]))
+        settings.sell_banks.append(bank)
+    _save_settings()
+    await call.message.edit_reply_markup(reply_markup=banks_kb("sell", settings.sell_banks))
     await call.answer()
-
-
-@router.callback_query(F.data == "buy_banks_save")
-async def cb_buy_banks_save(call: CallbackQuery):
-    uid = call.from_user.id
-    settings = get_settings(uid)
-    settings.buy_banks = user_temp_buy_banks.get(uid, settings.buy_banks)
-    _save_settings()
-    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("✅ Банк купівлі збережено!")
-
-
-@router.callback_query(F.data == "sell_banks_save")
-async def cb_sell_banks_save(call: CallbackQuery):
-    uid = call.from_user.id
-    settings = get_settings(uid)
-    settings.sell_banks = user_temp_sell_banks.get(uid, settings.sell_banks)
-    _save_settings()
-    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("✅ Банк продажу збережено!")
 
 
 @router.callback_query(F.data == "set_exchanges")
 async def cb_set_exchanges(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
-    user_temp_exchanges[call.from_user.id] = list(settings.exchanges)
     await call.message.edit_text(
         "📡 <b>Вибери біржі</b>\n\nПозначені біржі будуть скануватись:",
-        reply_markup=exchanges_kb(user_temp_exchanges[call.from_user.id]),
+        reply_markup=exchanges_kb(settings.exchanges),
         parse_mode="HTML",
     )
     await call.answer()
@@ -1162,28 +1141,17 @@ async def cb_set_exchanges(call: CallbackQuery):
 async def cb_ex_toggle(call: CallbackQuery):
     exchange = call.data.split("_")[2]
     uid = call.from_user.id
-    if uid not in user_temp_exchanges:
-        user_temp_exchanges[uid] = list(get_settings(uid).exchanges)
-    if exchange in user_temp_exchanges[uid]:
-        if len(user_temp_exchanges[uid]) > 1:
-            user_temp_exchanges[uid].remove(exchange)
-        else:
-            await call.answer("Потрібна хоча б одна біржа!", show_alert=True)
-            return
-    else:
-        user_temp_exchanges[uid].append(exchange)
-    await call.message.edit_reply_markup(reply_markup=exchanges_kb(user_temp_exchanges[uid]))
-    await call.answer()
-
-
-@router.callback_query(F.data == "exchanges_save")
-async def cb_exchanges_save(call: CallbackQuery):
-    uid = call.from_user.id
     settings = get_settings(uid)
-    settings.exchanges = user_temp_exchanges.get(uid, settings.exchanges)
+    if exchange in settings.exchanges:
+        if len(settings.exchanges) <= 1:
+            await call.answer("⚠️ Потрібна хоча б одна біржа!", show_alert=True)
+            return
+        settings.exchanges.remove(exchange)
+    else:
+        settings.exchanges.append(exchange)
     _save_settings()
-    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("✅ Біржі збережено!")
+    await call.message.edit_reply_markup(reply_markup=exchanges_kb(settings.exchanges))
+    await call.answer()
 
 
 ALL_EXCHANGES = ["Binance", "Bybit", "OKX"]
@@ -1199,7 +1167,7 @@ ARB_TYPE_NAMES = {
 @router.callback_query(F.data == "set_arb_types")
 async def cb_set_arb_types(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
-    user_temp_arb_types[call.from_user.id] = list(getattr(settings, "arb_types", ALL_ARB_TYPES))
+    arb_types = list(getattr(settings, "arb_types", ALL_ARB_TYPES))
     await call.message.edit_text(
         "🔀 <b>Типи арбітражу</b>\n\n"
         "Вибери які типи арбітражу шукати:\n\n"
@@ -1207,7 +1175,7 @@ async def cb_set_arb_types(call: CallbackQuery):
         "• <b>P2P крос-біржа</b> — купуєш на одній, продаєш на іншій\n"
         "• <b>Triangular</b> — через спот-маркет між двома біржами\n\n"
         "⚠️ Потрібен хоча б один тип.",
-        reply_markup=arb_types_kb(user_temp_arb_types[call.from_user.id]),
+        reply_markup=arb_types_kb(arb_types),
         parse_mode="HTML",
     )
     await call.answer()
@@ -1217,9 +1185,8 @@ async def cb_set_arb_types(call: CallbackQuery):
 async def cb_arb_type_toggle(call: CallbackQuery):
     key = call.data.split("arb_toggle_")[1]
     uid = call.from_user.id
-    if uid not in user_temp_arb_types:
-        user_temp_arb_types[uid] = list(getattr(get_settings(uid), "arb_types", ALL_ARB_TYPES))
-    current = user_temp_arb_types[uid]
+    settings = get_settings(uid)
+    current = list(getattr(settings, "arb_types", ALL_ARB_TYPES))
     if key in current:
         if len(current) <= 1:
             await call.answer("⚠️ Потрібен хоча б один тип!", show_alert=True)
@@ -1227,6 +1194,8 @@ async def cb_arb_type_toggle(call: CallbackQuery):
         current.remove(key)
     else:
         current.append(key)
+    settings.arb_types = current
+    _save_settings()
     await call.message.edit_reply_markup(reply_markup=arb_types_kb(current))
     await call.answer()
 
@@ -1234,25 +1203,15 @@ async def cb_arb_type_toggle(call: CallbackQuery):
 @router.callback_query(F.data == "arb_types_select_all")
 async def cb_arb_types_select_all(call: CallbackQuery):
     uid = call.from_user.id
-    user_temp_arb_types[uid] = list(ALL_ARB_TYPES)
-    await call.message.edit_reply_markup(reply_markup=arb_types_kb(user_temp_arb_types[uid]))
-    await call.answer()
-
-
-@router.callback_query(F.data == "arb_types_save")
-async def cb_arb_types_save(call: CallbackQuery):
-    uid = call.from_user.id
     settings = get_settings(uid)
-    saved = user_temp_arb_types.get(uid, ALL_ARB_TYPES)
-    settings.arb_types = saved
+    settings.arb_types = list(ALL_ARB_TYPES)
     _save_settings()
-    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("✅ Типи арбітражу збережено!")
+    await call.message.edit_reply_markup(reply_markup=arb_types_kb(settings.arb_types))
+    await call.answer()
 
 
 @router.callback_query(F.data == "select_all")
 async def cb_select_all(call: CallbackQuery):
-    """Включити всі біржі, всі банки, всі мережі одним натисканням."""
     uid = call.from_user.id
     settings = get_settings(uid)
     settings.exchanges = list(ALL_EXCHANGES)
@@ -1263,30 +1222,36 @@ async def cb_select_all(call: CallbackQuery):
     settings.arb_types = list(ALL_ARB_TYPES)
     _save_settings()
     await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("🌟 Увімкнено: всі 8 бірж, 6 банків, всі мережі, всі типи арбітражу!", show_alert=True)
+    await call.answer("🌟 Увімкнено: всі 3 біржі, 6 банків, всі мережі, всі типи арбітражу!", show_alert=True)
 
 
 @router.callback_query(F.data == "buy_banks_select_all")
 async def cb_buy_banks_select_all(call: CallbackQuery):
     uid = call.from_user.id
-    user_temp_buy_banks[uid] = list(ALL_BANKS)
-    await call.message.edit_reply_markup(reply_markup=banks_kb("buy", user_temp_buy_banks[uid]))
+    settings = get_settings(uid)
+    settings.buy_banks = list(ALL_BANKS)
+    _save_settings()
+    await call.message.edit_reply_markup(reply_markup=banks_kb("buy", settings.buy_banks))
     await call.answer("✅ Всі банки вибрано")
 
 
 @router.callback_query(F.data == "sell_banks_select_all")
 async def cb_sell_banks_select_all(call: CallbackQuery):
     uid = call.from_user.id
-    user_temp_sell_banks[uid] = list(ALL_BANKS)
-    await call.message.edit_reply_markup(reply_markup=banks_kb("sell", user_temp_sell_banks[uid]))
+    settings = get_settings(uid)
+    settings.sell_banks = list(ALL_BANKS)
+    _save_settings()
+    await call.message.edit_reply_markup(reply_markup=banks_kb("sell", settings.sell_banks))
     await call.answer("✅ Всі банки вибрано")
 
 
 @router.callback_query(F.data == "exchanges_select_all")
 async def cb_exchanges_select_all(call: CallbackQuery):
     uid = call.from_user.id
-    user_temp_exchanges[uid] = list(ALL_EXCHANGES)
-    await call.message.edit_reply_markup(reply_markup=exchanges_kb(user_temp_exchanges[uid]))
+    settings = get_settings(uid)
+    settings.exchanges = list(ALL_EXCHANGES)
+    _save_settings()
+    await call.message.edit_reply_markup(reply_markup=exchanges_kb(settings.exchanges))
     await call.answer("✅ Всі біржі вибрано")
 
 
