@@ -174,7 +174,6 @@ async def _live_countdown_and_delete(
         pass
 
 
-user_temp_trading_mode: dict[int, str] = {}
 
 # ─── Single-window tracking ────────────────────────────────────────────────
 # Only ONE bot message per user is the "dialog window" (pinned at top).
@@ -1294,46 +1293,23 @@ async def cb_exchanges_select_all(call: CallbackQuery):
 @router.callback_query(F.data == "set_payment_source")
 async def cb_set_trading_mode(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
-    uid = call.from_user.id
-    user_temp_trading_mode[uid] = settings.trading_mode
     await call.message.edit_text(
-        f"🛡️ <b>Спосіб торгівлі</b>\n\n"
-        f"Як ти хочеш торгувати?",
+        "🛡️ <b>Спосіб торгівлі</b>\n\nЯк ти хочеш торгувати?",
         reply_markup=trading_mode_kb(settings.trading_mode),
         parse_mode="HTML",
     )
     await call.answer()
 
 
-@router.callback_query(F.data == "tm_select_direct")
-async def cb_tm_select_direct(call: CallbackQuery):
-    uid = call.from_user.id
-    user_temp_trading_mode[uid] = "direct"
-    await call.message.edit_reply_markup(
-        reply_markup=trading_mode_kb("direct")
-    )
-    await call.answer()
-
-
-@router.callback_query(F.data == "tm_select_third")
-async def cb_tm_select_third(call: CallbackQuery):
-    uid = call.from_user.id
-    user_temp_trading_mode[uid] = "third_party"
-    await call.message.edit_reply_markup(
-        reply_markup=trading_mode_kb("third_party")
-    )
-    await call.answer()
-
-
-@router.callback_query(F.data == "tm_save")
-async def cb_tm_save(call: CallbackQuery):
+@router.callback_query(F.data.in_({"tm_set_direct", "tm_set_third"}))
+async def cb_tm_set(call: CallbackQuery):
     uid = call.from_user.id
     settings = get_settings(uid)
-    if uid in user_temp_trading_mode:
-        settings.trading_mode = user_temp_trading_mode[uid]
+    settings.trading_mode = "direct" if call.data == "tm_set_direct" else "third_party"
     _save_settings()
+    label = "Напряму" if settings.trading_mode == "direct" else "Як 3 особа"
     await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
-    await call.answer("✅ Спосіб торгівлі збережено!")
+    await call.answer(f"✅ {label} — збережено")
 
 
 @router.callback_query(F.data == "set_presets")
