@@ -150,7 +150,7 @@ def amount_kb(current: float) -> InlineKeyboardMarkup:
         rows.append(row)
     rows.append([
         InlineKeyboardButton(text="✏️ Своя сума", callback_data="amount_custom"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back_main"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -170,7 +170,7 @@ def antiscam_kb(current: float = 90.0) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=f"{mark(80)}80%", callback_data="antiscam_80"),
             InlineKeyboardButton(text=f"{mark(90)}90% — Рекоменд.", callback_data="antiscam_90"),
         ],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -235,7 +235,7 @@ def banks_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏦 Банк купівлі", callback_data="set_buy_banks")],
         [InlineKeyboardButton(text="🏦 Банк продажу", callback_data="set_sell_banks")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -247,7 +247,7 @@ def risk_level_kb(current: str = "") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=f"{mark('MEDIUM')}🟡 MEDIUM", callback_data="risk_MEDIUM"),
             InlineKeyboardButton(text=f"{mark('HIGH')}🔴 HIGH", callback_data="risk_HIGH"),
         ],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -269,7 +269,7 @@ def network_kb(current: str = "") -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text=f"{mark('ERC20')}ERC20 (ETH, ~$5)", callback_data="network_ERC20"),
         ],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -290,7 +290,7 @@ def arb_types_kb(selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text=all_label, callback_data="arb_types_select_all")])
     buttons.append([
         InlineKeyboardButton(text="✔️ Зберегти", callback_data="arb_types_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back_main"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -316,7 +316,7 @@ def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text=all_label, callback_data=f"{side}_banks_select_all")])
     buttons.append([
         InlineKeyboardButton(text="✔️ Зберегти", callback_data=f"{side}_banks_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back_main"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="set_banks"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -338,7 +338,7 @@ def exchanges_kb(selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text=all_label, callback_data="exchanges_select_all")])
     buttons.append([
         InlineKeyboardButton(text="✔️ Зберегти", callback_data="exchanges_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="back_main"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -347,12 +347,9 @@ def trading_mode_kb(mode: str) -> InlineKeyboardMarkup:
     direct_check = "✅" if mode == "direct" else "☐"
     third_check = "✅" if mode == "third_party" else "☐"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"{direct_check} 🤝 Напряму (я купую/продаю)", callback_data="tm_select_direct")],
-        [InlineKeyboardButton(text=f"{third_check} 🛡️ Як 3 особа (гарант)", callback_data="tm_select_third")],
-        [
-            InlineKeyboardButton(text="✔️ Зберегти", callback_data="tm_save"),
-            InlineKeyboardButton(text="🔙 Назад", callback_data="back_main"),
-        ],
+        [InlineKeyboardButton(text=f"{direct_check} 🤝 Напряму (я купую/продаю)", callback_data="tm_set_direct")],
+        [InlineKeyboardButton(text=f"{third_check} 🛡️ Як 3 особа (гарант)", callback_data="tm_set_third")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -362,7 +359,7 @@ def presets_kb(active: str = "") -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=f"{mark('conservative')}🟢 Conservative — безпечно", callback_data="preset_conservative")],
         [InlineKeyboardButton(text=f"{mark('balanced')}🟡 Balanced — рекомендовано", callback_data="preset_balanced")],
         [InlineKeyboardButton(text=f"{mark('aggressive')}🔴 Aggressive — швидко", callback_data="preset_aggressive")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
@@ -388,7 +385,7 @@ def participants_kb(participants: list[dict]) -> InlineKeyboardMarkup:
 #  ДОПОМІЖНІ КЛАВІАТУРИ ДЛЯ ВВЕДЕННЯ ТЕКСТУ
 # ─────────────────────────────────────────────────────────────
 
-def cancel_input_kb(back_callback: str = "back_main") -> InlineKeyboardMarkup:
+def cancel_input_kb(back_callback: str = "menu_settings") -> InlineKeyboardMarkup:
     """Кнопка «Назад» для екранів де очікується введення тексту."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔙 Назад", callback_data=back_callback)]
