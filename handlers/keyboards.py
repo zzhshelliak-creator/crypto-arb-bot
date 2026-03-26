@@ -210,8 +210,7 @@ def settings_kb(settings=None) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text=network_label, callback_data="set_network"),
         ],
         [
-            InlineKeyboardButton(text="🏦 Банк купівлі", callback_data="set_buy_banks"),
-            InlineKeyboardButton(text="🏦 Банк продажу", callback_data="set_sell_banks"),
+            InlineKeyboardButton(text="🏦 Банк", callback_data="set_banks"),
         ],
         [
             InlineKeyboardButton(text="📡 Біржі", callback_data="set_exchanges"),
@@ -230,6 +229,15 @@ def settings_kb(settings=None) -> InlineKeyboardMarkup:
         ],
         [InlineKeyboardButton(text="📋 Швидкі пресети", callback_data="set_presets")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="back_main")],
+    ])
+
+
+def banks_menu_kb() -> InlineKeyboardMarkup:
+    """Підменю вибору типу банку — купівля або продаж."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏦 Банк купівлі", callback_data="set_buy_banks")],
+        [InlineKeyboardButton(text="🏦 Банк продажу", callback_data="set_sell_banks")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")],
     ])
 
 
