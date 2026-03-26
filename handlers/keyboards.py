@@ -322,7 +322,7 @@ def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
 
 
 def exchanges_kb(selected: list[str]) -> InlineKeyboardMarkup:
-    all_exchanges = ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"]
+    all_exchanges = ["Binance", "Bybit", "OKX"]
     all_selected = len(selected) >= len(all_exchanges)
     buttons = []
     row = []
