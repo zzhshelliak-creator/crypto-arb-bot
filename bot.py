@@ -1,4 +1,4 @@
-# Deployed: 2026-03-25T22:28:00.943Z
+# Deployed: 2026-03-26T05:51:25.879Z — banks submenu
 import asyncio
 import logging
 import os
@@ -13,6 +13,10 @@ from services.arbitrage_engine import ArbitrageEngine
 from handlers.main_handler import router
 
 load_dotenv()
+
+if os.getenv("BOT_DISABLED", "").lower() in ("true", "1", "yes"):
+    print("BOT_DISABLED=true — бот вимкнено на цьому середовищі (запущений на Railway)")
+    exit(0)
 
 logging.basicConfig(
     level=logging.INFO,
