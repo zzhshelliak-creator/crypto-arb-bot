@@ -200,6 +200,10 @@ async def cmd_start(message: Message):
     uid = message.from_user.id
     settings = get_settings(uid)
     await _try_delete(message)   # delete user's /start message
+    try:
+        await message.bot.unpin_all_chat_messages(chat_id=message.chat.id)
+    except Exception:
+        pass
     sent = await message.answer(
         "👋 <b>Crypto Arbitrage Bot</b>\n\n"
         "Знаходжу реальні арбітражні можливості на P2P та Spot ринках.\n"
@@ -287,12 +291,15 @@ async def cmd_help(message: Message):
 async def cb_back_main(call: CallbackQuery, state: FSMContext):
     await state.clear()
     uid = call.from_user.id
-    # Sync main message tracking (restores after bot restart)
     user_main_msg[uid] = call.message.message_id
     settings = get_settings(uid)
     try:
         await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     except TelegramBadRequest:
+        pass
+    try:
+        await call.bot.unpin_all_chat_messages(chat_id=call.message.chat.id)
+    except Exception:
         pass
     await call.answer()
 
