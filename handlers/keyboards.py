@@ -1,6 +1,22 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
+def _p2p_url(exchange: str, order_id: str, side: str) -> str:
+    """Generate a direct deep-link URL to a specific P2P ad on the exchange."""
+    if not order_id:
+        return ""
+    if exchange == "Binance":
+        action = "buy" if side == "BUY" else "sell"
+        return f"https://p2p.binance.com/en/trade/{action}-USDT?advertiserNo={order_id}"
+    elif exchange == "Bybit":
+        action_type = "1" if side == "BUY" else "0"
+        return f"https://www.bybit.com/fiat/trade/otc/?actionType={action_type}&token=USDT&fiat=UAH&adId={order_id}"
+    elif exchange == "OKX":
+        action = "buy" if side == "BUY" else "sell"
+        return f"https://www.okx.com/p2p/ads-detail?adId={order_id}&side={action}"
+    return ""
+
+
 # ─────────────────────────────────────────────────────────────
 #  ГОЛОВНЕ МЕНЮ
 # ─────────────────────────────────────────────────────────────
@@ -115,7 +131,7 @@ def opportunities_list_kb(opportunities, autoscan_running: bool = False) -> Inli
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def opportunity_kb(index: int, total: int) -> InlineKeyboardMarkup:
+def opportunity_kb(index: int, total: int, opp=None) -> InlineKeyboardMarkup:
     buttons = []
     nav = []
     if index > 0:
@@ -124,6 +140,34 @@ def opportunity_kb(index: int, total: int) -> InlineKeyboardMarkup:
         nav.append(InlineKeyboardButton(text="Наступна ▶️", callback_data=f"opp_next_{index}"))
     if nav:
         buttons.append(nav)
+
+    # ── "Почати арбітраж" — прямі посилання на конкретні ордери ──
+    if opp:
+        is_cross = (
+            opp.buy_exchange != opp.sell_exchange
+            and getattr(opp, "sell_order", None) is not None
+        )
+        buy_url = ""
+        sell_url = ""
+        if getattr(opp, "buy_order", None) and opp.buy_order.order_id:
+            buy_url = _p2p_url(opp.buy_exchange, opp.buy_order.order_id, "BUY")
+        if is_cross and getattr(opp, "sell_order", None) and opp.sell_order.order_id:
+            sell_url = _p2p_url(opp.sell_exchange, opp.sell_order.order_id, "SELL")
+
+        if is_cross and buy_url and sell_url:
+            # Cross-exchange: дві окремі кнопки — купівля і продаж
+            buttons.append([InlineKeyboardButton(
+                text=f"🛒 1. Купити на {opp.buy_exchange}", url=buy_url
+            )])
+            buttons.append([InlineKeyboardButton(
+                text=f"💰 2. Продати на {opp.sell_exchange}", url=sell_url
+            )])
+        elif buy_url:
+            # Same exchange
+            buttons.append([InlineKeyboardButton(
+                text=f"🚀 Відкрити ордер на {opp.buy_exchange}", url=buy_url
+            )])
+
     buttons.append([
         InlineKeyboardButton(text="⭐ Зберегти", callback_data=f"opp_save_{index}"),
         InlineKeyboardButton(text="📋 До списку", callback_data="opp_list"),
