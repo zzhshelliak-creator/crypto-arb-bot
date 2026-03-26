@@ -1186,7 +1186,7 @@ async def cb_exchanges_save(call: CallbackQuery):
     await call.answer("✅ Біржі збережено!")
 
 
-ALL_EXCHANGES = ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"]
+ALL_EXCHANGES = ["Binance", "Bybit", "OKX"]
 ALL_BANKS = ["PrivatBank", "Monobank", "PUMB", "A-Bank", "Oschadbank", "Raiffeisen"]
 ALL_ARB_TYPES = ["p2p_same", "cross_exchange", "triangular"]
 ARB_TYPE_NAMES = {
