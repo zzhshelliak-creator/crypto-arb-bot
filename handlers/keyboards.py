@@ -318,7 +318,7 @@ def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text=all_label, callback_data=f"{side}_banks_select_all")])
     buttons.append([
         InlineKeyboardButton(text="✔️ Зберегти", callback_data=f"{side}_banks_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
+        InlineKeyboardButton(text="🔙 Назад", callback_data="set_banks"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
