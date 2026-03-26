@@ -150,12 +150,6 @@ async def _set_main_msg(bot, chat_id: int, user_id: int, message_id: int) -> Non
             await bot.delete_message(chat_id=chat_id, message_id=old_id)
         except Exception:
             pass
-    try:
-        await bot.pin_chat_message(
-            chat_id=chat_id, message_id=message_id, disable_notification=True
-        )
-    except Exception:
-        pass
 
 
 async def _try_delete(bot_or_msg, chat_id: int = None, message_id: int = None):
@@ -720,12 +714,8 @@ async def cb_amount_preset(call: CallbackQuery, state: FSMContext):
     settings = get_settings(call.from_user.id)
     settings.amount_uah = value
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Сума: <b>{value:,.0f} грн</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer(f"✅ {value:,.0f} грн")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer(f"✅ {value:,.0f} грн — збережено")
 
 
 @router.callback_query(F.data == "amount_custom")
@@ -859,8 +849,8 @@ async def process_min_profit(message: Message, state: FSMContext):
         await state.clear()
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            f"✅ Мін. профіт: <b>{val:,.0f} грн</b>",
-            reply_markup=settings_kb(settings),
+            main_text(settings),
+            reply_markup=main_menu_kb(),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Невірний формат числа")
@@ -886,12 +876,8 @@ async def cb_risk_set(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
     settings.risk_level = risk
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Ризик встановлено: <b>{risk}</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer(f"Ризик: {risk}")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer(f"✅ Ризик: {risk} — збережено")
 
 
 @router.callback_query(F.data == "set_antiscam")
@@ -919,13 +905,8 @@ async def cb_antiscam_set(call: CallbackQuery):
     settings.min_completion_rate = val
     _save_settings()
     risk_desc = {60: "⚠️ Ризиковано", 70: "🟡 Помірно", 80: "🟢 Безпечно", 90: "✅ Надійно"}.get(int(val), "")
-    await call.message.edit_text(
-        f"🛡 Анті-скам встановлено: <b>{val:.0f}%</b>  {risk_desc}\n\n"
-        + format_settings(settings),
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer(f"Анті-скам: {val:.0f}%")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer(f"✅ Анті-скам: {val:.0f}% {risk_desc} — збережено")
 
 
 @router.callback_query(F.data == "set_bank_fee")
@@ -964,11 +945,10 @@ async def process_bank_fee(message: Message, state: FSMContext):
         settings.bank_fee_uah = val
         _save_settings()
         await state.clear()
-        label = f"{val:,.0f} грн" if val > 0 else "0 грн (вимкнено)"
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            f"✅ Комісія банку: <b>{label}</b>\n\n" + format_settings(settings),
-            reply_markup=settings_kb(settings),
+            main_text(settings),
+            reply_markup=main_menu_kb(),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Введи число, наприклад: <code>25</code>")
@@ -992,12 +972,8 @@ async def cb_network_set(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
     settings.network = network
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Мережа: <b>{network}</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer(f"Мережа: {network}")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer(f"✅ Мережа: {network} — збережено")
 
 
 @router.callback_query(F.data == "set_banks")
@@ -1068,12 +1044,8 @@ async def cb_buy_banks_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.buy_banks = user_temp_buy_banks.get(uid, settings.buy_banks)
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Банк купівлі збережено: <b>{', '.join(settings.buy_banks)}</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer("Збережено!")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer("✅ Банк купівлі збережено!")
 
 
 @router.callback_query(F.data == "sell_banks_save")
@@ -1082,12 +1054,8 @@ async def cb_sell_banks_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.sell_banks = user_temp_sell_banks.get(uid, settings.sell_banks)
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Банк продажу збережено: <b>{', '.join(settings.sell_banks)}</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer("Збережено!")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer("✅ Банк продажу збережено!")
 
 
 @router.callback_query(F.data == "set_exchanges")
@@ -1126,12 +1094,8 @@ async def cb_exchanges_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.exchanges = user_temp_exchanges.get(uid, settings.exchanges)
     _save_settings()
-    await call.message.edit_text(
-        f"✅ Біржі збережено: <b>{', '.join(settings.exchanges)}</b>",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer("Збережено!")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer("✅ Біржі збережено!")
 
 
 ALL_EXCHANGES = ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"]
@@ -1194,13 +1158,8 @@ async def cb_arb_types_save(call: CallbackQuery):
     saved = user_temp_arb_types.get(uid, ALL_ARB_TYPES)
     settings.arb_types = saved
     _save_settings()
-    names = ", ".join(ARB_TYPE_NAMES.get(k, k) for k in saved)
-    await call.message.edit_text(
-        f"✅ <b>Типи арбітражу збережено:</b>\n{names}",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer("Збережено!")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer("✅ Типи арбітражу збережено!")
 
 
 @router.callback_query(F.data == "select_all")
@@ -1215,11 +1174,7 @@ async def cb_select_all(call: CallbackQuery):
     settings.risk_level = "HIGH"
     settings.arb_types = list(ALL_ARB_TYPES)
     _save_settings()
-    await call.message.edit_text(
-        format_settings(settings),
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     await call.answer("🌟 Увімкнено: всі 8 бірж, 6 банків, всі мережі, всі типи арбітражу!", show_alert=True)
 
 
@@ -1288,14 +1243,8 @@ async def cb_tm_save(call: CallbackQuery):
     if uid in user_temp_trading_mode:
         settings.trading_mode = user_temp_trading_mode[uid]
     _save_settings()
-    mode_text = "🤝 Напряму (я купую/продаю)" if settings.trading_mode == "direct" else "🛡️ Як 3 особа (гарант)"
-
-    await call.message.edit_text(
-        f"✅ <b>Спосіб торгівлі:</b> {mode_text}",
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
-    await call.answer("Збережено!")
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.answer("✅ Спосіб торгівлі збережено!")
 
 
 @router.callback_query(F.data == "set_presets")
@@ -1322,11 +1271,7 @@ async def cb_preset_conservative(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 10
     _save_settings()
-    await call.message.edit_text(
-        format_settings(settings),
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     await call.answer("✅ Консервативний профіль активовано!")
 
 
@@ -1341,11 +1286,7 @@ async def cb_preset_balanced(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 30
     _save_settings()
-    await call.message.edit_text(
-        format_settings(settings),
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     await call.answer("✅ Збалансований профіль активовано!")
 
 
@@ -1360,11 +1301,7 @@ async def cb_preset_aggressive(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 60
     _save_settings()
-    await call.message.edit_text(
-        format_settings(settings),
-        reply_markup=settings_kb(settings),
-        parse_mode="HTML",
-    )
+    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
     await call.answer("✅ Агресивний профіль активовано!")
 
 
@@ -1401,8 +1338,8 @@ async def process_interval(message: Message, state: FSMContext):
         await state.clear()
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            f"✅ Інтервал авто-скану: <b>{val} сек</b>",
-            reply_markup=settings_kb(settings),
+            main_text(settings),
+            reply_markup=main_menu_kb(),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Введіть ціле число")
