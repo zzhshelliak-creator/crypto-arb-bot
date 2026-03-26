@@ -32,6 +32,7 @@ router = Router()
 # Load persisted settings from disk on startup
 user_settings: dict[int, UserSettings] = settings_storage.load_all()
 user_opportunities: dict[int, list] = {}
+user_opps_time: dict[int, float] = {}      # timestamp when opps were found
 user_live_tasks: dict[int, asyncio.Task] = {}
 user_temp_buy_banks: dict[int, list] = {}
 user_temp_sell_banks: dict[int, list] = {}
@@ -39,7 +40,8 @@ user_temp_exchanges: dict[int, list] = {}
 user_temp_arb_types: dict[int, list] = {}
 
 
-_OPP_TTL_SECONDS = 90   # Opportunity notification lives for 90 seconds
+_OPP_TTL_SECONDS = 90       # notification TTL for autoscan alerts
+_OPP_DISPLAY_TTL = 1800     # 30 minutes — orders expire for display
 
 
 def _save_settings():
@@ -51,20 +53,70 @@ def _save_settings():
 
 
 async def _schedule_delete(chat_id: int, message_id: int, delay: int = _OPP_TTL_SECONDS):
-    """Видаляє повідомлення через delay секунд (за замовчуванням 30 хв)."""
+    """Видаляє КОРОТКІ сповіщення авто-скану через delay секунд."""
     await asyncio.sleep(delay)
     try:
         await shared.bot_instance.delete_message(chat_id=chat_id, message_id=message_id)
-        logger.debug(f"Auto-deleted message {message_id} in chat {chat_id} after {delay}s")
     except Exception:
         pass
 
 
+# Per-user expire tasks for main scan results
+user_opps_expire_task: dict[int, asyncio.Task] = {}
+
+
+async def _expire_worker(uid: int, chat_id: int, msg_id: int, expire_at: float):
+    """Waits until expire_at then clears cache and edits the message to 'expired'."""
+    try:
+        wait = expire_at - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        # Clear cache
+        user_opportunities.pop(uid, None)
+        user_opps_time.pop(uid, None)
+        # Edit message visually
+        from handlers.keyboards import retry_kb as _retry_kb
+        await shared.bot_instance.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=(
+                "⏰ <b>Ордери застаріли</b>\n\n"
+                "Минуло 30 хвилин — ціни вже змінились.\n"
+                "Запусти нове сканування для актуальних результатів."
+            ),
+            reply_markup=_retry_kb(),
+            parse_mode="HTML",
+        )
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
+    finally:
+        user_opps_expire_task.pop(uid, None)
+
+
+def _launch_expire_task(uid: int, chat_id: int, msg_id: int):
+    """Cancel any previous expire task and start a new one for this user's scan result."""
+    old = user_opps_expire_task.pop(uid, None)
+    if old and not old.done():
+        old.cancel()
+    expire_at = user_opps_time.get(uid, time.time()) + _OPP_DISPLAY_TTL
+    task = asyncio.create_task(_expire_worker(uid, chat_id, msg_id, expire_at))
+    user_opps_expire_task[uid] = task
+
+
 def _expire_header(delay: int = _OPP_TTL_SECONDS) -> str:
-    """Статичний рядок-шапка з часом закінчення."""
+    """Статичний рядок-шапка з часом закінчення (для коротких сповіщень авто-скану)."""
     expire_at = time.time() + delay
     expire_hm = time.strftime("%H:%M:%S", time.localtime(expire_at))
     return f"🔴 <b>АКТУАЛЬНО {delay} СЕК</b> • автовидалення о {expire_hm}"
+
+
+def _scan_expire_header() -> str:
+    """Шапка для основних результатів сканування — актуально 30 хвилин."""
+    expire_at = time.time() + _OPP_DISPLAY_TTL
+    expire_hm = time.strftime("%H:%M", time.localtime(expire_at))
+    return f"✅ <b>Ордери актуальні до {expire_hm}</b> (30 хв)"
 
 
 def _countdown_line(expire_at: float) -> str:
@@ -331,6 +383,7 @@ async def cb_scan_start(call: CallbackQuery):
             opportunities = [o for o in opportunities if o.verified]
         record_scan(opportunities)
         user_opportunities[call.from_user.id] = opportunities
+        user_opps_time[call.from_user.id] = time.time()
 
         if not opportunities:
             stats = shared.arb_engine.last_scan_stats
@@ -417,15 +470,13 @@ async def cb_scan_start(call: CallbackQuery):
             scan_stats = shared.arb_engine.last_scan_stats
             body = format_opportunities_list(opportunities)
             report = format_scan_report(scan_stats)
-            text = _expire_header() + "\n—\n" + body + "\n—\n" + report
+            text = _scan_expire_header() + "\n—\n" + body + "\n—\n" + report
             await call.message.edit_text(
                 text,
                 reply_markup=opportunities_list_kb(opportunities, autoscan_running=is_autoscan),
                 parse_mode="HTML",
             )
-            asyncio.create_task(
-                _schedule_delete(call.message.chat.id, call.message.message_id)
-            )
+            _launch_expire_task(uid, call.message.chat.id, call.message.message_id)
     except Exception as e:
         logger.error(f"Scan error: {e}", exc_info=True)
         await call.message.edit_text(
@@ -437,7 +488,8 @@ async def cb_scan_start(call: CallbackQuery):
 
 @router.callback_query(F.data == "opp_list")
 async def cb_opp_list(call: CallbackQuery):
-    opps = user_opportunities.get(call.from_user.id, [])
+    uid = call.from_user.id
+    opps = user_opportunities.get(uid, [])
     if not opps:
         await call.message.edit_text(
             "🔍 Немає збережених результатів. Натисни 🔍 Сканувати для пошуку.",
@@ -446,9 +498,24 @@ async def cb_opp_list(call: CallbackQuery):
         )
         await call.answer()
         return
-    uid = call.from_user.id
+    # Check 30-minute expiry
+    found_at = user_opps_time.get(uid, 0)
+    age_seconds = time.time() - found_at
+    if age_seconds > _OPP_DISPLAY_TTL:
+        user_opportunities.pop(uid, None)
+        user_opps_time.pop(uid, None)
+        await call.message.edit_text(
+            "⏰ <b>Ордери застаріли</b>\n\n"
+            "Минуло 30 хвилин — ціни вже змінились.\n"
+            "Запусти нове сканування для актуальних результатів.",
+            reply_markup=retry_kb(),
+            parse_mode="HTML",
+        )
+        await call.answer("Ордери застаріли — скануй знову")
+        return
     is_autoscan = uid in user_live_tasks and not user_live_tasks[uid].done()
-    text = format_opportunities_list(opps)
+    mins_left = int((_OPP_DISPLAY_TTL - age_seconds) / 60)
+    text = format_opportunities_list(opps) + f"\n\n⏱ <i>Ордери дійсні ще ~{mins_left} хв</i>"
     await call.message.edit_text(text, reply_markup=opportunities_list_kb(opps, autoscan_running=is_autoscan), parse_mode="HTML")
     await call.answer()
 
@@ -456,12 +523,25 @@ async def cb_opp_list(call: CallbackQuery):
 @router.callback_query(F.data.startswith("opp_detail_"))
 async def cb_opp_detail(call: CallbackQuery):
     index = int(call.data.split("_")[-1])
-    opps = user_opportunities.get(call.from_user.id, [])
+    uid = call.from_user.id
+    opps = user_opportunities.get(uid, [])
+    # Check 30-minute expiry
+    found_at = user_opps_time.get(uid, 0)
+    if time.time() - found_at > _OPP_DISPLAY_TTL:
+        user_opportunities.pop(uid, None)
+        user_opps_time.pop(uid, None)
+        await call.message.edit_text(
+            "⏰ <b>Ордери застаріли</b>\n\nМинуло 30 хвилин — ціни вже змінились.\n"
+            "Запусти нове сканування для актуальних результатів.",
+            reply_markup=retry_kb(), parse_mode="HTML",
+        )
+        await call.answer("Ордери застаріли — скануй знову")
+        return
     if not opps or index >= len(opps):
         await call.answer("Можливість не знайдена", show_alert=True)
         return
     opp = opps[index]
-    s = get_settings(call.from_user.id)
+    s = get_settings(uid)
     text = format_opportunity(opp, index + 1, s.trading_mode, getattr(s, "bank_fee_uah", 0.0), buy_banks=s.buy_banks, sell_banks=s.sell_banks)
     await call.message.edit_text(text, reply_markup=opportunity_kb(index, len(opps)), parse_mode="HTML")
     await call.answer()
@@ -632,6 +712,8 @@ async def _live_loop(chat_id: int, user_id: int):
             opps = [o for o in opps if o.scanned_at <= 0 or (now - o.scanned_at) <= _OPP_TTL_SECONDS]
             record_scan(opps)
             user_opportunities[user_id] = opps
+            if opps:
+                user_opps_time[user_id] = time.time()
 
             found_total = user_autoscan_found_count.get(user_id, 0)
             new_fp = _opp_fingerprint(opps)
@@ -721,7 +803,7 @@ async def cb_amount_preset(call: CallbackQuery, state: FSMContext):
     settings = get_settings(call.from_user.id)
     settings.amount_uah = value
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer(f"✅ {value:,.0f} грн — збережено")
 
 
@@ -856,8 +938,8 @@ async def process_min_profit(message: Message, state: FSMContext):
         await state.clear()
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            main_text(settings),
-            reply_markup=main_menu_kb(),
+            format_settings(settings),
+            reply_markup=settings_kb(settings),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Невірний формат числа")
@@ -883,7 +965,7 @@ async def cb_risk_set(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
     settings.risk_level = risk
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer(f"✅ Ризик: {risk} — збережено")
 
 
@@ -912,7 +994,7 @@ async def cb_antiscam_set(call: CallbackQuery):
     settings.min_completion_rate = val
     _save_settings()
     risk_desc = {60: "⚠️ Ризиковано", 70: "🟡 Помірно", 80: "🟢 Безпечно", 90: "✅ Надійно"}.get(int(val), "")
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer(f"✅ Анті-скам: {val:.0f}% {risk_desc} — збережено")
 
 
@@ -954,8 +1036,8 @@ async def process_bank_fee(message: Message, state: FSMContext):
         await state.clear()
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            main_text(settings),
-            reply_markup=main_menu_kb(),
+            format_settings(settings),
+            reply_markup=settings_kb(settings),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Введи число, наприклад: <code>25</code>")
@@ -979,7 +1061,7 @@ async def cb_network_set(call: CallbackQuery):
     settings = get_settings(call.from_user.id)
     settings.network = network
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer(f"✅ Мережа: {network} — збережено")
 
 
@@ -1051,7 +1133,7 @@ async def cb_buy_banks_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.buy_banks = user_temp_buy_banks.get(uid, settings.buy_banks)
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Банк купівлі збережено!")
 
 
@@ -1061,7 +1143,7 @@ async def cb_sell_banks_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.sell_banks = user_temp_sell_banks.get(uid, settings.sell_banks)
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Банк продажу збережено!")
 
 
@@ -1101,7 +1183,7 @@ async def cb_exchanges_save(call: CallbackQuery):
     settings = get_settings(uid)
     settings.exchanges = user_temp_exchanges.get(uid, settings.exchanges)
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Біржі збережено!")
 
 
@@ -1165,7 +1247,7 @@ async def cb_arb_types_save(call: CallbackQuery):
     saved = user_temp_arb_types.get(uid, ALL_ARB_TYPES)
     settings.arb_types = saved
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Типи арбітражу збережено!")
 
 
@@ -1181,7 +1263,7 @@ async def cb_select_all(call: CallbackQuery):
     settings.risk_level = "HIGH"
     settings.arb_types = list(ALL_ARB_TYPES)
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("🌟 Увімкнено: всі 8 бірж, 6 банків, всі мережі, всі типи арбітражу!", show_alert=True)
 
 
@@ -1250,7 +1332,7 @@ async def cb_tm_save(call: CallbackQuery):
     if uid in user_temp_trading_mode:
         settings.trading_mode = user_temp_trading_mode[uid]
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Спосіб торгівлі збережено!")
 
 
@@ -1278,7 +1360,7 @@ async def cb_preset_conservative(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 10
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Консервативний профіль активовано!")
 
 
@@ -1293,7 +1375,7 @@ async def cb_preset_balanced(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 30
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Збалансований профіль активовано!")
 
 
@@ -1308,7 +1390,7 @@ async def cb_preset_aggressive(call: CallbackQuery):
     settings.trading_mode = "direct"
     settings.scan_interval = 60
     _save_settings()
-    await call.message.edit_text(main_text(settings), reply_markup=main_menu_kb(), parse_mode="HTML")
+    await call.message.edit_text(format_settings(settings), reply_markup=settings_kb(settings), parse_mode="HTML")
     await call.answer("✅ Агресивний профіль активовано!")
 
 
@@ -1345,8 +1427,8 @@ async def process_interval(message: Message, state: FSMContext):
         await state.clear()
         await _edit_or_answer(
             message, bot_msg_id, chat_id,
-            main_text(settings),
-            reply_markup=main_menu_kb(),
+            format_settings(settings),
+            reply_markup=settings_kb(settings),
         )
     except ValueError:
         await _edit_or_answer(message, bot_msg_id, chat_id, "❌ Введіть ціле число")
