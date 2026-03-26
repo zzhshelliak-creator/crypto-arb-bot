@@ -288,18 +288,11 @@ def arb_types_kb(selected: list[str]) -> InlineKeyboardMarkup:
     all_selected = all(k in selected for k, _ in ALL_TYPES)
     all_label = "✅ Всі типи вибрано" if all_selected else "🌟 Вибрати всі типи"
     buttons.append([InlineKeyboardButton(text=all_label, callback_data="arb_types_select_all")])
-    buttons.append([
-        InlineKeyboardButton(text="✔️ Зберегти", callback_data="arb_types_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
-    ])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
-    """
-    side: "buy" або "sell"
-    Callback-prefixes: {side}_bank_toggle_*, {side}_banks_select_all, {side}_banks_save
-    """
     all_banks = ["PrivatBank", "Monobank", "PUMB", "A-Bank", "Oschadbank", "Raiffeisen"]
     all_selected = set(selected) >= set(all_banks)
     buttons = []
@@ -314,10 +307,7 @@ def banks_kb(side: str, selected: list[str]) -> InlineKeyboardMarkup:
         buttons.append(row)
     all_label = "✅ Всі банки вибрано" if all_selected else "🌟 Вибрати всі банки"
     buttons.append([InlineKeyboardButton(text=all_label, callback_data=f"{side}_banks_select_all")])
-    buttons.append([
-        InlineKeyboardButton(text="✔️ Зберегти", callback_data=f"{side}_banks_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="set_banks"),
-    ])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="set_banks")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -336,10 +326,7 @@ def exchanges_kb(selected: list[str]) -> InlineKeyboardMarkup:
         buttons.append(row)
     all_label = "✅ Всі біржі вибрано" if all_selected else "🌟 Вибрати всі біржі"
     buttons.append([InlineKeyboardButton(text=all_label, callback_data="exchanges_select_all")])
-    buttons.append([
-        InlineKeyboardButton(text="✔️ Зберегти", callback_data="exchanges_save"),
-        InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings"),
-    ])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="menu_settings")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
