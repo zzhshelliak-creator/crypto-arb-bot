@@ -17,7 +17,7 @@ _ALL_DEFAULTS = {
     "amount_uah": 20000.0,
     "min_profit_uah": 50.0,
     "risk_level": "MEDIUM",
-    "exchanges": ["Binance", "Bybit", "OKX", "Bitget", "MEXC", "Gate.io", "HTX", "KuCoin"],
+    "exchanges": ["Binance", "Bybit", "OKX"],
     "buy_banks": ["PrivatBank", "Monobank"],
     "sell_banks": ["PrivatBank", "Monobank"],
     "network": "TRC20",
@@ -42,11 +42,12 @@ def _raw_to_settings(raw: dict) -> UserSettings:
         merged["buy_banks"] = list(raw["banks"])
     if "banks" in raw and "sell_banks" not in raw:
         merged["sell_banks"] = list(raw["banks"])
+    _ACTIVE_EXCHANGES = {"Binance", "Bybit", "OKX"}
     return UserSettings(
         amount_uah=float(merged["amount_uah"]),
         min_profit_uah=float(merged["min_profit_uah"]),
         risk_level=str(merged["risk_level"]),
-        exchanges=list(merged["exchanges"]),
+        exchanges=[e for e in merged["exchanges"] if e in _ACTIVE_EXCHANGES] or ["Binance", "Bybit", "OKX"],
         buy_banks=list(merged["buy_banks"]),
         sell_banks=list(merged["sell_banks"]),
         network=str(merged["network"]),
